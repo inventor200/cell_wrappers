@@ -275,3 +275,4 @@ subcategory type.
 [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
 [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 [`qcell`]: https://docs.rs/qcell/latest/qcell/index.html
+[`cell_family`]: https://lib.rs/crates/cell-family
