@@ -1,7 +1,13 @@
 [package]
 name = "cell_wrappers"
-version = "0.1.0"
+version = "0.1.1"
+authors = ["Joseph Cramsey"]
+description = "This is a set of macros for ergonomically working with `TCell`s and `TLCell`s from the `qcell` crate."
+license = "MIT"
+homepage = "https://github.com/karthikrathinavel/rustlibrary1"
+repository = "https://github.com/karthikrathinavel/rustlibrary1"
 edition = "2021"
+readme = "README.md"
 
 [dependencies]
 qcell = "0.5.4"

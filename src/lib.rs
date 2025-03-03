@@ -1,133 +1,1264 @@
 #[macro_export]
 macro_rules! c_scp {
-    // Mutable internal borrow
+    ( @handle_op_props ( $scope:ident $ref_type:ident immut $cell_info:tt ) $decl:tt ) => {
+        & $decl
+    };
+    ( @handle_op_props ( $scope:ident $ref_type:ident ismut $cell_info:tt ) $decl:tt ) => {
+        & mut $decl
+    };
     {
-        use $type_path:path => (
-            $cell_src:expr
-            => $(&)? mut $container_name:ident
-            $( : $(& $($lif0:lifetime)? )? $container_type:ty )? )
-            $( { $($statement:stmt);+ ; } )? $(;)?
+        @handle_owner_source ( @from_path $type_path:path => ) ,
+        ( $scope:ident $ref_type:ident $muta:ident $cell_info:tt )
+    } => {
+        <$type_path> :: new()
+    };
+    {
+        @handle_owner_source ( @from_auto => ) ,
+        ( $scope:ident $ref_type:ident $muta:ident ( $cell_src:expr ) )
+    } => {
+        $cell_src . get_new_matching_owner()
+    };
+    {
+        @handle_owner_source ( @from_self $_self:ident => ) ,
+        ( $scope:ident $ref_type:ident $muta:ident ( $cell_src:expr ) )
+    } => {
+        $cell_src . get_matching_owner_from($_self)
+    };
+    ( @handle_sources_right $owner_name:ident , ( @from_scp_src_immut $owner_src:expr => ) , $op_props:tt ) => {
+        let $owner_name = & $owner_src;
+    };
+    ( @handle_sources_right $owner_name:ident , ( @from_scp_src_ismut $owner_src:expr => ) , $op_props:tt ) => {
+        let $owner_name = &mut $owner_src;
+    };
+    ( @handle_sources_right $owner_name:ident , $src_info:tt , $op_props:tt ) => {
+        let $owner_name =
+        $crate::c_scp!( @handle_op_props $op_props (
+            $crate::c_scp!( @handle_owner_source $src_info , $op_props )
+        ) ) ;
+    };
+    // General pattern reorganizer - Stage 1
+    // Separate out borrow details
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                mut $cell_src:expr
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( internal borrow ismut ( $cell_src ) )
+        );
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( internal borrow immut ( $cell_src ) )
+        );
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr =>
+                * out mut $container_name:ident $( . $container_ext:ident)*
+                $( as $container_type1:ty )?
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( external deref ismut ( $cell_src ) )
+        );
+        $container_name $( . $container_ext)* =
+        ( * $cell_src . rw ( $owner_name ) ) $( as $container_type1 )? ;
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr =>
+                & out mut $container_name:ident $( . $container_ext:ident)*
+                $( as $container_type1:ty )?
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( external hardborrow ismut ( $cell_src ) )
+        );
+        $container_name $( . $container_ext)* =
+        ( & $cell_src . rw ( $owner_name ) ) $( as $container_type1 )? ;
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr =>
+                out mut $container_name:ident $( . $container_ext:ident)*
+                $( as $container_type1:ty )?
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( external borrow ismut ( $cell_src ) )
+        );
+        $container_name $( . $container_ext)* =
+        ( $cell_src . rw ( $owner_name ) ) $( as $container_type1 )? ;
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr =>
+                & out $container_name:ident $( . $container_ext:ident)*
+                $( as $container_type1:ty )?
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( external hardborrow immut ( $cell_src ) )
+        );
+        $container_name $( . $container_ext)* =
+        &( $cell_src . ro ( $owner_name ) )
+        $( as $container_type1 )? ;
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr =>
+                * out $container_name:ident $( . $container_ext:ident)*
+                $( as $container_type1:ty )?
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( external deref immut ( $cell_src ) )
+        );
+        $container_name $( . $container_ext)* =
+        ( * $cell_src . ro ( $owner_name ) )
+        $( as $container_type1 )? ;
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr =>
+                * mut $container_name:ident $( . $container_ext:ident)*
+                $( : $container_type0:ty )?
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( internal borrow ismut ( $cell_src ) )
+        );
+        let mut $container_name $( . $container_ext)*
+        $( : $container_type0 )? =
+        ( * $cell_src . rw ( $owner_name ) );
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr =>
+                out $container_name:ident $( . $container_ext:ident)*
+                $( as $container_type1:ty )?
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( external borrow immut ( $cell_src ) )
+        );
+        $container_name $( . $container_ext)* =
+        $cell_src . ro ( $owner_name )
+        $( as $container_type1 )? ;
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr =>
+                * $container_name:ident $( . $container_ext:ident)*
+                $( : $container_type0:ty )?
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( internal deref immut ( $cell_src ) )
+        );
+        let $container_name $( . $container_ext)*
+        $( : $container_type0 )? =
+        * $cell_src . ro ( $owner_name );
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr =>
+                $(&)? mut $container_name:ident $( . $container_ext:ident)*
+                $( : $container_type0:ty )?
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( internal borrow ismut ( $cell_src ) )
+        );
+        let $container_name $( . $container_ext)*
+        $( : $container_type0 )? =
+        $cell_src . rw ( $owner_name );
+    };
+    {
+        @reorganize_body1 (
+            $owner_type_header:tt ,
+            ( $owner_name:ident ) ,
+            (
+                $cell_src:expr =>
+                $(&)? $container_name:ident $( . $container_ext:ident)*
+                $( : $container_type0:ty )?
+            )
+        )
+    } => {
+        $crate::c_scp!(
+            @handle_sources_right
+            $owner_name ,
+            $owner_type_header ,
+            ( internal borrow immut ( $cell_src ) )
+        );
+        let $container_name $( . $container_ext)*
+        $( : $container_type0 )? =
+        $cell_src . ro ( $owner_name );
+    };
+    // General pattern reorganizer
+    {
+        let $scope_owner_name:ident = _ =>
+        $operation_details:tt
+        $( $statements:block )? $(;)?
     } => {
         {
-            let __scope_owner = &mut <$type_path> :: new();
-            let $container_name $( : $(& $($lif0)? )? $container_type )?
-                = $cell_src . rw( __scope_owner ) ;
-            $( $($statement)+ )?
+            $crate::c_scp! {
+                @reorganize_body1 (
+                    ( @from_auto => ) ,
+                    ( $scope_owner_name ) ,
+                    $operation_details
+                )
+            }
+            ; $( $statements )?
         }
     };
-    // Immutable internal borrow
     {
-        use $type_path:path => (
-            $cell_src:expr
-            => $(&)? $container_name:ident
-            $( : $(& $($lif0:lifetime)? )? $container_type:ty )? )
-            $( { $($statement:stmt);+ ; } )? $(;)?
+        use _ =>
+        $operation_details:tt
+        $( $statements:block )? $(;)?
     } => {
         {
-            let __scope_owner = & <$type_path> :: new();
-            let $container_name $( : $(& $($lif0)? )? $container_type )?
-                = $cell_src . ro( __scope_owner ) ;
-            $( $($statement)+ )?
+            $crate::c_scp! {
+                @reorganize_body1 (
+                    ( @from_auto => ) ,
+                    ( __scope_owner ) ,
+                    $operation_details
+                )
+            }
+            ; $( $statements )?
         }
     };
-    // Immutable internal deref
     {
-        use $type_path:path => (
-            $cell_src:expr
-            => * $container_name:ident
-            $( : $(& $($lif0:lifetime)? )? $container_type:ty )? )
-            $( { $($statement:stmt);+ ; } )? $(;)?
+        let $scope_owner_name:ident = & mut $owner_src:expr =>
+        $operation_details:tt
+        $( $statements:block )? $(;)?
     } => {
         {
-            let __scope_owner = & <$type_path> :: new();
-            let $container_name $( : $(& $($lif0)? )? $container_type )?
-                = *($cell_src . ro( __scope_owner )) ;
-            $( $($statement)+ )?
+            $crate::c_scp! {
+                @reorganize_body1 (
+                    ( @from_scp_src_ismut $owner_src => ) ,
+                    ( $scope_owner_name ) ,
+                    $operation_details
+                )
+            }
+            ; $( $statements )?
         }
     };
-    // Immutable external borrow
     {
-        use $type_path:path => (
-            $cell_src:expr
-            => out $container_name:ident
-            $( as $(& $($lif0:lifetime)? )? $container_type:ty )? )
-            $({ $($statement:stmt);+ ; })? $(;)?
+        use & mut $owner_src:expr =>
+        $operation_details:tt
+        $( $statements:block )? $(;)?
     } => {
         {
-            let __scope_owner = & <$type_path> :: new();
-            $container_name = $cell_src . ro( __scope_owner )
-                $( as $(& $($lif0:lifetime)? )? $container_type:ty )? ;
-            $( $($statement)+ )?
+            $crate::c_scp! {
+                @reorganize_body1 (
+                    ( @from_scp_src_ismut $owner_src => ) ,
+                    ( __scope_owner ) ,
+                    $operation_details
+                )
+            }
+            ; $( $statements )?
         }
     };
-    // Immutable external deref
     {
-        use $type_path:path => (
-            $cell_src:expr
-            => * out $container_name:ident
-            $( as $(& $($lif0:lifetime)? )? $container_type:ty )? )
-            $({ $($statement:stmt);+ ; })? $(;)?
+        let $scope_owner_name:ident = & $owner_src:expr =>
+        $operation_details:tt
+        $( $statements:block )? $(;)?
     } => {
         {
-            let __scope_owner = & <$type_path> :: new();
-            $container_name = *($cell_src . ro( __scope_owner )
-                $( as $(& $($lif0:lifetime)? )? $container_type:ty )?) ;
-            $( $($statement)+ )?
+            $crate::c_scp! {
+                @reorganize_body1 (
+                    ( @from_scp_src_immut $owner_src => ) ,
+                    ( $scope_owner_name ) ,
+                    $operation_details
+                )
+            }
+            ; $( $statements )?
         }
     };
-    // Immutable external hard borrow
     {
-        use $type_path:path => (
-            $cell_src:expr
-            => & out $container_name:ident
-            $( as $(& $($lif0:lifetime)? )? $container_type:ty )? )
-            $({ $($statement:stmt);+ ; })? $(;)?
+        use & $owner_src:expr =>
+        $operation_details:tt
+        $( $statements:block )? $(;)?
     } => {
         {
-            let __scope_owner = & <$type_path> :: new();
-            $container_name = &($cell_src . ro( __scope_owner )
-                $( as $(& $($lif0:lifetime)? )? $container_type:ty )?) ;
-            $( $($statement)+ )?
+            $crate::c_scp! {
+                @reorganize_body1 (
+                    ( @from_scp_src_immut $owner_src => ) ,
+                    ( __scope_owner ) ,
+                    $operation_details
+                )
+            }
+            ; $( $statements )?
+        }
+    };
+    {
+        let $scope_owner_name:ident = [$_self:ident] =>
+        $operation_details:tt
+        $( $statements:block )? $(;)?
+    } => {
+        {
+            $crate::c_scp! {
+                @reorganize_body1 (
+                    ( @from_self $_self => ) ,
+                    ( $scope_owner_name ) ,
+                    $operation_details
+                )
+            }
+            ; $( $statements )?
+        }
+    };
+    {
+        use [$_self:ident] =>
+        $operation_details:tt
+        $( $statements:block )? $(;)?
+    } => {
+        {
+            $crate::c_scp! {
+                @reorganize_body1 (
+                    ( @from_self $_self => ) ,
+                    ( __scope_owner ) ,
+                    $operation_details
+                )
+            }
+            ; $( $statements )?
+        }
+    };
+    {
+        let $scope_owner_name:ident =
+        $owner_type_header:ident $( :: $owner_path_ext:ident )* =>
+        $operation_details:tt
+        $( $statements:block )? $(;)?
+    } => {
+        {
+            $crate::c_scp! {
+                @reorganize_body1 (
+                    ( @from_path $owner_type_header $( :: $owner_path_ext )* => ) ,
+                    ( $scope_owner_name ) ,
+                    $operation_details
+                )
+            }
+            ; $( $statements )?
+        }
+    };
+    {
+        use
+        $owner_type_header:ident $( :: $owner_path_ext:ident )* =>
+        $operation_details:tt
+        $( $statements:block )? $(;)?
+    } => {
+        {
+            $crate::c_scp! {
+                @reorganize_body1 (
+                    ( @from_path $owner_type_header $( :: $owner_path_ext )* => ) ,
+                    ( __scope_owner ) ,
+                    $operation_details
+                )
+            }
+            ; $( $statements )?
+        }
+    }
+}
+
+// These structs are just here to give the linter
+// something to match to, if desired.
+mod cell_grp_types {
+    #[allow(dead_code)]
+    pub struct TCellUniGrp;
+    #[allow(dead_code)]
+    pub struct TCellAccGrp;
+    #[allow(dead_code)]
+    pub struct TLCellUniGrp;
+    #[allow(dead_code)]
+    pub struct TLCellAccGrp;
+    #[allow(dead_code)]
+    pub struct TCellPubGrp;
+    #[allow(dead_code)]
+    pub struct TCellPvtGrp;
+    #[allow(dead_code)]
+    pub struct TLCellPubGrp;
+    #[allow(dead_code)]
+    pub struct TLCellPvtGrp;
+}
+
+// Represents the TCell and TLCell implementations.
+// "GT" refers to the possibility of either T or TL.
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum CellImpl {
+    T,
+    TL
+}
+
+// Represents the default access types.
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum CellAccessLevels {
+    Uniform,
+    Private,
+    Public
+}
+
+// Represents the roles in the T/TLCell ecosystem.
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum CellRoles {
+    Marker,
+    Owner,
+    Cell
+}
+
+// These are here for execution management and organization.
+//
+// Implementation type
+pub trait IsTImpl {
+    #[inline]
+    fn get_cell_impl() -> CellImpl {
+        CellImpl::T
+    }
+    #[inline]
+    fn get_self_cell_impl(&self) -> CellImpl {
+        CellImpl::T
+    }
+}
+pub trait IsTLImpl {
+    #[inline]
+    fn get_cell_impl() -> CellImpl {
+        CellImpl::TL
+    }
+    #[inline]
+    fn get_self_cell_impl(&self) -> CellImpl {
+        CellImpl::TL
+    }
+}
+// Access levels
+pub trait IsGTPvtAccess {
+    #[inline]
+    fn is_private_access() -> bool {
+        true
+    }
+    #[inline]
+    fn is_uniform_access() -> bool {
+        false
+    }
+    #[inline]
+    fn is_public_access() -> bool {
+        false
+    }
+    #[inline]
+    fn get_access_level() -> CellAccessLevels {
+        CellAccessLevels::Private
+    }
+    #[inline]
+    fn is_self_private_access(&self) -> bool {
+        true
+    }
+    #[inline]
+    fn is_self_uniform_access(&self) -> bool {
+        false
+    }
+    #[inline]
+    fn is_self_public_access(&self) -> bool {
+        false
+    }
+    #[inline]
+    fn get_self_access_level(&self) -> CellAccessLevels {
+        CellAccessLevels::Private
+    }
+}
+pub trait IsTPvtAccess : IsGTPvtAccess + IsTImpl {}
+pub trait IsTLPvtAccess : IsGTPvtAccess + IsTLImpl {}
+pub trait IsGTUniAccess {
+    #[inline]
+    fn is_private_access() -> bool {
+        false
+    }
+    #[inline]
+    fn is_uniform_access() -> bool {
+        true
+    }
+    #[inline]
+    fn is_public_access() -> bool {
+        false
+    }
+    #[inline]
+    fn get_access_level() -> CellAccessLevels {
+        CellAccessLevels::Uniform
+    }
+    #[inline]
+    fn is_self_private_access(&self) -> bool {
+        false
+    }
+    #[inline]
+    fn is_self_uniform_access(&self) -> bool {
+        true
+    }
+    #[inline]
+    fn is_self_public_access(&self) -> bool {
+        false
+    }
+    #[inline]
+    fn get_self_access_level(&self) -> CellAccessLevels {
+        CellAccessLevels::Uniform
+    }
+}
+pub trait IsTUniAccess : IsGTUniAccess + IsTImpl {}
+pub trait IsTLUniAccess : IsGTUniAccess + IsTLImpl {}
+pub trait IsGTPubAccess {
+    #[inline]
+    fn is_private_access() -> bool {
+        false
+    }
+    #[inline]
+    fn is_uniform_access() -> bool {
+        false
+    }
+    #[inline]
+    fn is_public_access() -> bool {
+        true
+    }
+    #[inline]
+    fn get_access_level() -> CellAccessLevels {
+        CellAccessLevels::Public
+    }
+    #[inline]
+    fn is_self_private_access(&self) -> bool {
+        false
+    }
+    #[inline]
+    fn is_self_uniform_access(&self) -> bool {
+        false
+    }
+    #[inline]
+    fn is_self_public_access(&self) -> bool {
+        true
+    }
+    #[inline]
+    fn get_self_access_level(&self) -> CellAccessLevels {
+        CellAccessLevels::Public
+    }
+}
+pub trait IsTPubAccess : IsGTPubAccess + IsTImpl {}
+pub trait IsTLPubAccess : IsGTPubAccess + IsTLImpl {}
+// Markers
+pub trait IsGTMarker {
+    #[inline]
+    fn get_cell_role() -> CellRoles {
+        CellRoles::Marker
+    }
+    #[inline]
+    fn get_self_cell_role(&self) -> CellRoles {
+        CellRoles::Marker
+    }
+}
+pub trait IsGTUniMarker : IsGTMarker + IsGTUniAccess {}
+pub trait IsGTPubMarker : IsGTMarker + IsGTPubAccess {}
+pub trait IsGTPvtMarker : IsGTMarker + IsGTPvtAccess {}
+pub trait IsTMarker : IsGTMarker + IsTImpl {}
+pub trait IsTUniMarker : IsTMarker + IsTUniAccess {}
+pub trait IsTPubMarker : IsTMarker + IsTPubAccess {}
+pub trait IsTPvtMarker : IsTMarker + IsTPvtAccess {}
+pub trait IsTLMarker : IsGTMarker + IsTLImpl {}
+pub trait IsTLUniMarker : IsTLMarker + IsTLUniAccess {}
+pub trait IsTLPubMarker : IsTLMarker + IsTLPubAccess {}
+pub trait IsTLPvtMarker : IsTLMarker + IsTLPvtAccess {}
+// Owners
+pub trait IsGTOwner {
+    #[inline]
+    fn get_cell_role() -> CellRoles {
+        CellRoles::Owner
+    }
+    #[inline]
+    fn get_self_cell_role(&self) -> CellRoles {
+        CellRoles::Owner
+    }
+}
+pub trait IsGTUniOwner : IsGTOwner + IsGTUniAccess {}
+pub trait IsGTPubOwner : IsGTOwner + IsGTPubAccess {}
+pub trait IsGTPvtOwner : IsGTOwner + IsGTPvtAccess {}
+pub trait IsTOwner : IsGTOwner + IsTImpl {}
+pub trait IsTUniOwner : IsTOwner + IsTUniAccess {}
+pub trait IsTPubOwner : IsTOwner + IsTPubAccess {}
+pub trait IsTPvtOwner : IsTOwner + IsTPvtAccess {}
+pub trait IsTLOwner : IsGTOwner + IsTLImpl {}
+pub trait IsTLUniOwner : IsTLOwner + IsTLUniAccess {}
+pub trait IsTLPubOwner : IsTLOwner + IsTLPubAccess {}
+pub trait IsTLPvtOwner : IsTLOwner + IsTLPvtAccess {}
+// Cells
+pub trait IsGTCell {
+    #[inline]
+    fn get_cell_role() -> CellRoles {
+        CellRoles::Cell
+    }
+    #[inline]
+    fn get_self_cell_role(&self) -> CellRoles {
+        CellRoles::Cell
+    }
+}
+pub trait IsGTUniCell : IsGTCell + IsGTUniAccess {}
+pub trait IsGTPubCell : IsGTCell + IsGTPubAccess {}
+pub trait IsGTPvtCell : IsGTCell + IsGTPvtAccess {}
+pub trait IsTCell : IsGTCell + IsTImpl {}
+pub trait IsTUniCell : IsTCell + IsTUniAccess {}
+pub trait IsTPubCell : IsTCell + IsTPubAccess {}
+pub trait IsTPvtCell : IsTCell + IsTPvtAccess {}
+pub trait IsTLCell : IsGTCell + IsTLImpl {}
+pub trait IsTLUniCell : IsTLCell + IsTLUniAccess {}
+pub trait IsTLPubCell : IsTLCell + IsTLPubAccess {}
+pub trait IsTLPvtCell : IsTLCell + IsTLPvtAccess {}
+
+pub trait GetEasyPvtOwner {
+    type OwnerType;
+    fn get_new_matching_owner(&self) -> Self::OwnerType;
+    fn get_matching_owner_from(&self, src : & impl GetPvtOwner<Self::OwnerType>) -> Self::OwnerType;
+}
+
+pub trait GetEasyPubOwner {
+    type OwnerType;
+    fn get_new_matching_owner(&self) -> Self::OwnerType;
+    fn get_matching_owner_from(&self, src : & impl GetPubOwner<Self::OwnerType>) -> Self::OwnerType;
+}
+
+pub trait GetEasyUniOwner {
+    type OwnerType;
+    fn get_new_matching_owner(&self) -> Self::OwnerType;
+    fn get_matching_owner_from(&self, src : & impl GetUniOwner<Self::OwnerType>) -> Self::OwnerType;
+}
+
+// Implementation defaults for qcell contents
+impl<Q, T> IsTImpl for qcell::TCell<Q, T> where T : ?Sized {}
+impl<Q, T> IsGTCell for qcell::TCell<Q, T> where T : ?Sized {}
+impl<Q, T> IsTCell for qcell::TCell<Q, T> where T : ?Sized {}
+
+impl<Q, T> IsTLImpl for qcell::TLCell<Q, T> where T : ?Sized {}
+impl<Q, T> IsGTCell for qcell::TLCell<Q, T> where T : ?Sized {}
+impl<Q, T> IsTLCell for qcell::TLCell<Q, T> where T : ?Sized {}
+
+impl<Q> IsTImpl for qcell::TCellOwner<Q> {}
+impl<Q> IsGTOwner for qcell::TCellOwner<Q> {}
+impl<Q> IsTOwner for qcell::TCellOwner<Q> {}
+
+impl<Q> IsTLImpl for qcell::TLCellOwner<Q> {}
+impl<Q> IsGTOwner for qcell::TLCellOwner<Q> {}
+impl<Q> IsTLOwner for qcell::TLCellOwner<Q> {}
+
+// Some traits for getting the shorthand forms to work.
+pub trait GetPvtOwner<T> {
+    fn get_private_owner(&self) -> T;
+}
+pub trait GetPubOwner<T> {
+    fn get_public_owner(&self) -> T;
+}
+pub trait GetUniOwner<T> {
+    fn get_uniform_owner(&self) -> T;
+}
+
+#[macro_export]
+macro_rules! impl_get_pvt {
+    ( $struct_name:ident => $owner_path:path ) => {
+        impl $crate::GetPvtOwner<$owner_path> for $struct_name {
+            #[inline]
+            fn get_private_owner(&self) -> $owner_path {
+                <$owner_path>::new()
+            }
         }
     };
 }
 
-// These are just here to give the linter something to chew on.
-pub struct TLCellUniGrp;
-pub struct TCellUniGrp;
-pub struct TLCellAccGrp;
-pub struct TCellAccGrp;
-pub struct TLCellPubGrp;
-pub struct TCellPubGrp;
-pub struct TLCellPvtGrp;
-pub struct TCellPvtGrp;
+#[macro_export]
+macro_rules! impl_get_pub {
+    ( $struct_name:ident => $owner_path:path ) => {
+        impl $crate::GetPubOwner<$owner_path> for $struct_name {
+            #[inline]
+            fn get_public_owner(&self) -> $owner_path {
+                <$owner_path>::new()
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! impl_get_uni {
+    ( $struct_name:ident => $owner_path:path ) => {
+        impl $crate::GetUniOwner<$owner_path> for $struct_name {
+            #[inline]
+            fn get_uniform_owner(&self) -> $owner_path {
+                <$owner_path>::new()
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! new_t_marker_type {
+    ( @finish_build => ( $marker_name:ident ) ) => {
+        impl IsGTMarker for $marker_name {}
+        impl IsTMarker for $marker_name {}
+        impl IsTImpl for $marker_name {}
+        impl IsGTUniAccess for $marker_name {}
+        impl IsTUniAccess for $marker_name {}
+        impl IsTUniMarker for $marker_name {}
+    };
+    ( $( # [ $attr:meta ] )* $marker_name:ident ) => {
+        $( # [ $attr:meta ] )*
+        pub struct $marker_name;
+        $crate::new_t_marker_type!( @finish_build => ( $marker_name ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis $marker_name:ident ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty struct $marker_name;
+        $crate::new_t_marker_type!( @finish_build => ( $marker_name ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis type $marker_name:ident ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty struct $marker_name;
+        $crate::new_t_marker_type!( @finish_build => ( $marker_name ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis struct $marker_name:ident ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty struct $marker_name;
+        $crate::new_t_marker_type!( @finish_build => ( $marker_name ) )
+    }
+}
+
+#[macro_export]
+macro_rules! new_tl_marker_type {
+    ( @finish_build => ( $marker_name:ident ) ) => {
+        impl IsGTMarker for $marker_name {}
+        impl IsTLMarker for $marker_name {}
+        impl IsTLImpl for $marker_name {}
+        impl IsGTUniAccess for $marker_name {}
+        impl IsTLUniAccess for $marker_name {}
+        impl IsTLUniMarker for $marker_name {}
+    };
+    ( $( # [ $attr:meta ] )* $marker_name:ident ) => {
+        $( # [ $attr:meta ] )*
+        struct $marker_name;
+        $crate::new_tl_marker_type!( @finish_build => ( $marker_name ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis $marker_name:ident ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty struct $marker_name;
+        $crate::new_tl_marker_type!( @finish_build => ( $marker_name ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis type $marker_name:ident ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty struct $marker_name;
+        $crate::new_tl_marker_type!( @finish_build => ( $marker_name ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis struct $marker_name:ident ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty struct $marker_name;
+        $crate::new_tl_marker_type!( @finish_build => ( $marker_name ) )
+    }
+}
+
+#[macro_export]
+macro_rules! new_t_owner_type {
+    ( @finish_build => ( $owner_name:ident [ $marker_name:ident ] ) ) => {
+        impl IsGTUniAccess for $owner_name {}
+        impl IsTUniAccess for $owner_name {}
+        impl IsTUniOwner for $owner_name {}
+    };
+    ( $( # [ $attr:meta ] )* $owner_name:ident [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        type $owner_name = qcell::TCellOwner<$marker_name>;
+        $crate::new_t_owner_type!( @finish_build => ( $owner_name [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis $owner_name:ident [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty type $owner_name = qcell::TCellOwner<$marker_name>;
+        $crate::new_t_owner_type!( @finish_build => ( $owner_name [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis type $owner_name:ident [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty type $owner_name = qcell::TCellOwner<$marker_name>;
+        $crate::new_t_owner_type!( @finish_build => ( $owner_name [ $marker_name ] ) )
+    };
+}
+
+#[macro_export]
+macro_rules! new_tl_owner_type {
+    ( @finish_build => ( $owner_name:ident [ $marker_name:ident ] ) ) => {
+        impl IsGTUniAccess for $owner_name {}
+        impl IsTLUniAccess for $owner_name {}
+        impl IsTLUniOwner for $owner_name {}
+    };
+    ( $( # [ $attr:meta ] )* $owner_name:ident [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        type $owner_name = qcell::TLCellOwner<$marker_name>;
+        $crate::new_tl_owner_type!( @finish_build => ( $owner_name [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis $owner_name:ident [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty type $owner_name = qcell::TLCellOwner<$marker_name>;
+        $crate::new_tl_owner_type!( @finish_build => ( $owner_name [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis type $owner_name:ident [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty type $owner_name = qcell::TLCellOwner<$marker_name>;
+        $crate::new_tl_owner_type!( @finish_build => ( $owner_name [ $marker_name ] ) )
+    };
+}
+
+#[macro_export]
+macro_rules! new_t_cell_type {
+    ( @finish_build => ( $cell_name:ident < $cell_type:ident > [ $marker_name:ident ] ) ) => {
+        impl<$cell_type> IsGTUniAccess for $cell_name<$cell_type> {}
+        impl<$cell_type> IsTUniAccess for $cell_name<$cell_type> {}
+        impl<$cell_type> IsTUniCell for $cell_name<$cell_type> {}
+    };
+    ( $( # [ $attr:meta ] )* $cell_name:ident < $cell_type:ident > [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        type $cell_name<$cell_type> = qcell::TCell<$marker_name, $cell_type>;
+        $crate::new_t_cell_type!( @finish_build => ( $cell_name < $cell_type > [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $cell_name:ident [ $marker_name:ident ] < $cell_type:ident > ) => {
+        $( # [ $attr:meta ] )*
+        type $cell_name<$cell_type> = qcell::TCell<$marker_name, $cell_type>;
+        $crate::new_t_cell_type!( @finish_build => ( $cell_name < $cell_type > [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $cell_name:ident [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        type $cell_name<T> = qcell::TCell<$marker_name, T>;
+        $crate::new_t_cell_type!( @finish_build => ( $cell_name < T > [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis $cell_name:ident < $cell_type:ident > [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty type $cell_name<$cell_type> = qcell::TCell<$marker_name, $cell_type>;
+        $crate::new_t_cell_type!( @finish_build => ( $cell_name < $cell_type > [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis $cell_name:ident [ $marker_name:ident ] < $cell_type:ident > ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty type $cell_name<$cell_type> = qcell::TCell<$marker_name, $cell_type>;
+        $crate::new_t_cell_type!( @finish_build => ( $cell_name < $cell_type > [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis $cell_name:ident [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty type $cell_name<T> = qcell::TCell<$marker_name, T>;
+        $crate::new_t_cell_type!( @finish_build => ( $cell_name < T > [ $marker_name ] ) )
+    };
+}
+
+#[macro_export]
+macro_rules! new_tl_cell_type {
+    ( @finish_build => ( $cell_name:ident < $cell_type:ident > [ $marker_name:ident ] ) ) => {
+        impl<$cell_type> IsGTUniAccess for $cell_name<$cell_type> {}
+        impl<$cell_type> IsTLUniAccess for $cell_name<$cell_type> {}
+        impl<$cell_type> IsTLUniCell for $cell_name<$cell_type> {}
+    };
+    ( $( # [ $attr:meta ] )* $cell_name:ident < $cell_type:ident > [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        type $cell_name<$cell_type> = qcell::TLCell<$marker_name, $cell_type>;
+        $crate::new_tl_cell_type!( @finish_build => ( $cell_name < $cell_type > [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $cell_name:ident [ $marker_name:ident ] < $cell_type:ident > ) => {
+        $( # [ $attr:meta ] )*
+        type $cell_name<$cell_type> = qcell::TLCell<$marker_name, $cell_type>;
+        $crate::new_tl_cell_type!( @finish_build => ( $cell_name < $cell_type > [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $cell_name:ident [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        type $cell_name<T> = qcell::TLCell<$marker_name, T>;
+        $crate::new_tl_cell_type!( @finish_build => ( $cell_name < T > [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis $cell_name:ident < $cell_type:ident > [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty type $cell_name<$cell_type> = qcell::TLCell<$marker_name, $cell_type>;
+        $crate::new_tl_cell_type!( @finish_build => ( $cell_name < $cell_type > [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis $cell_name:ident [ $marker_name:ident ] < $cell_type:ident > ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty type $cell_name<$cell_type> = qcell::TLCell<$marker_name, $cell_type>;
+        $crate::new_tl_cell_type!( @finish_build => ( $cell_name < $cell_type > [ $marker_name ] ) )
+    };
+    ( $( # [ $attr:meta ] )* $visibilty:vis $cell_name:ident [ $marker_name:ident ] ) => {
+        $( # [ $attr:meta ] )*
+        $visibilty type $cell_name<T> = qcell::TLCell<$marker_name, T>;
+        $crate::new_tl_cell_type!( @finish_build => ( $cell_name < T > [ $marker_name ] ) )
+    };
+}
+
+#[macro_export]
+macro_rules! create_t_group {
+    ( $( # [ $attr:meta ] )* $visibilty:vis $owner_name:ident [ $marker_name:ident ] => $cell_name:ident $( < $cell_type:ident > )? ) => {
+        $( # [ $attr:meta ] )*
+        $crate::new_t_marker_type!($visibilty $marker_name);
+        $( # [ $attr:meta ] )*
+        $crate::new_t_owner_type!($visibilty $owner_name [ $marker_name ]);
+        $( # [ $attr:meta ] )*
+        $crate::new_t_cell_type!($visibilty $cell_name $( < $cell_type > )? [ $marker_name ]);
+    };
+    ( @for_individual => ( $visibilty:vis cell : $cell_name:ident $( < $cell_type:ident > )? [ $marker_name:ident ] ) ) => {
+        $crate::new_t_cell_type!($visibilty $cell_name [ $marker_name ] $( < $cell_type > )?)
+    };
+    ( @for_individual => ( $visibilty:vis owner : $owner_name:ident [ $marker_name:ident ] ) ) => {
+        $crate::new_t_owner_type!($visibilty $owner_name [ $marker_name ] )
+    };
+    {
+        $( # [ $attr2:meta ] )* $visibilty2:vis marker : $marker_name:ident ,
+        $( # [ $attr0:meta ] )* $visibilty0:vis $key0:ident : $value0:ident $( < $cell_type0:ident > )? ,
+        $( # [ $attr1:meta ] )* $visibilty1:vis $key1:ident : $value1:ident $( < $cell_type1:ident > )? $(,)?
+    } => {
+        $( # [ $attr2:meta ] )*
+        $crate::new_t_marker_type!($visibilty2 $marker_name);
+        $( # [ $attr0:meta ] )*
+        $crate::create_t_group!( @for_individual => ( $visibilty0 $key0 : $value0 $( < $cell_type0 > )? [ $marker_name ] ) );
+        $( # [ $attr1:meta ] )*
+        $crate::create_t_group!( @for_individual => ( $visibilty1 $key1 : $value1 $( < $cell_type1 > )? [ $marker_name ] ) );
+    };
+    {
+        $( # [ $attr0:meta ] )* $visibilty0:vis $key0:ident : $value0:ident $( < $cell_type0:ident > )? ,
+        $( # [ $attr2:meta ] )* $visibilty2:vis marker : $marker_name:ident ,
+        $( # [ $attr1:meta ] )* $visibilty1:vis $key1:ident : $value1:ident $( < $cell_type1:ident > )? $(,)?
+    } => {
+        $( # [ $attr2:meta ] )*
+        $crate::new_t_marker_type!($visibilty2 $marker_name);
+        $( # [ $attr0:meta ] )*
+        $crate::create_t_group!( @for_individual => ( $visibilty0 $key0 : $value0 $( < $cell_type0 > )? [ $marker_name ] ) );
+        $( # [ $attr1:meta ] )*
+        $crate::create_t_group!( @for_individual => ( $visibilty1 $key1 : $value1 $( < $cell_type1 > )? [ $marker_name ] ) );
+    };
+    {
+        $( # [ $attr0:meta ] )* $visibilty0:vis $key0:ident : $value0:ident $( < $cell_type0:ident > )? ,
+        $( # [ $attr1:meta ] )* $visibilty1:vis $key1:ident : $value1:ident $( < $cell_type1:ident > )? ,
+        $( # [ $attr2:meta ] )* $visibilty2:vis marker : $marker_name:ident $(,)?
+    } => {
+        $( # [ $attr2:meta ] )*
+        $crate::new_t_marker_type!($visibilty2 $marker_name);
+        $( # [ $attr0:meta ] )*
+        $crate::create_t_group!( @for_individual => ( $visibilty0 $key0 : $value0 $( < $cell_type0 > )? [ $marker_name ] ) );
+        $( # [ $attr1:meta ] )*
+        $crate::create_t_group!( @for_individual => ( $visibilty1 $key1 : $value1 $( < $cell_type1 > )? [ $marker_name ] ) );
+    };
+}
+
+#[macro_export]
+macro_rules! create_tl_group {
+    ( $visibilty:vis $owner_name:ident [ $marker_name:ident ] => $cell_name:ident $( < $cell_type:ident > )? ) => {
+        $crate::new_tl_marker_type!($visibilty $marker_name);
+        $crate::new_tl_owner_type!($visibilty $owner_name [ $marker_name ]);
+        $crate::new_tl_cell_type!($visibilty $cell_name $( < $cell_type > )? [ $marker_name ]);
+    };
+    ( @for_individual => ( $visibilty:vis cell : $cell_name:ident $( < $cell_type:ident > )? [ $marker_name:ident ] ) ) => {
+        $crate::new_tl_cell_type!($visibilty $cell_name [ $marker_name ] $( < $cell_type > )?)
+    };
+    ( @for_individual => ( $visibilty:vis owner : $owner_name:ident [ $marker_name:ident ] ) ) => {
+        $crate::new_tl_owner_type!($visibilty $owner_name [ $marker_name ] )
+    };
+    {
+        $visibilty2:vis marker : $marker_name:ident ,
+        $visibilty0:vis $key0:ident : $value0:ident $( < $cell_type0:ident > )? ,
+        $visibilty1:vis $key1:ident : $value1:ident $( < $cell_type1:ident > )? $(,)?
+    } => {
+        $crate::new_tl_marker_type!($visibilty2 $marker_name);
+        $crate::create_tl_group!( @for_individual => ( $visibilty0 $key0 : $value0 $( < $cell_type0 > )? [ $marker_name ] ) );
+        $crate::create_tl_group!( @for_individual => ( $visibilty1 $key1 : $value1 $( < $cell_type1 > )? [ $marker_name ] ) );
+    };
+    {
+        $visibilty0:vis $key0:ident : $value0:ident $( < $cell_type0:ident > )? ,
+        $visibilty2:vis marker : $marker_name:ident ,
+        $visibilty1:vis $key1:ident : $value1:ident $( < $cell_type1:ident > )? $(,)?
+    } => {
+        $crate::new_tl_marker_type!($visibilty2 $marker_name);
+        $crate::create_tl_group!( @for_individual => ( $visibilty0 $key0 : $value0 $( < $cell_type0 > )? [ $marker_name ] ) );
+        $crate::create_tl_group!( @for_individual => ( $visibilty1 $key1 : $value1 $( < $cell_type1 > )? [ $marker_name ] ) );
+    };
+    {
+        $visibilty0:vis $key0:ident : $value0:ident $( < $cell_type0:ident > )? ,
+        $visibilty1:vis $key1:ident : $value1:ident $( < $cell_type1:ident > )? ,
+        $visibilty2:vis marker : $marker_name:ident $(,)?
+    } => {
+        $crate::new_tl_marker_type!($visibilty2 $marker_name);
+        $crate::create_tl_group!( @for_individual => ( $visibilty0 $key0 : $value0 $( < $cell_type0 > )? [ $marker_name ] ) );
+        $crate::create_tl_group!( @for_individual => ( $visibilty1 $key1 : $value1 $( < $cell_type1 > )? [ $marker_name ] ) );
+    };
+}
+
+// Panic messages
+#[inline]
+#[allow(dead_code)]
+fn pvt_owner_unavailable_msg() -> String {
+    String::from(
+        "Tried to request a private owner from a mod that cannot provide one."
+    )
+}
+
+#[inline]
+#[allow(dead_code)]
+fn uni_owner_unavailable_msg() -> String {
+    String::from(
+        "Tried to request a uniform owner from a mod that cannot provide one."
+    )
+}
+
+#[inline]
+#[allow(dead_code)]
+fn pub_owner_unavailable_msg() -> String {
+    String::from(
+        "Tried to request a public owner from a mod that cannot provide one."
+    )
+}
+
+#[inline]
+#[allow(dead_code)]
+fn pvt_cell_unavailable_msg() -> String {
+    String::from(
+        "Tried to request a private cell from a mod that cannot provide one."
+    )
+}
+
+#[inline]
+#[allow(dead_code)]
+fn uni_cell_unavailable_msg() -> String {
+    String::from(
+        "Tried to request a uniform cell from a mod that cannot provide one."
+    )
+}
+
+#[inline]
+#[allow(dead_code)]
+fn pub_cell_unavailable_msg() -> String {
+    String::from(
+        "Tried to request a public cell from a mod that cannot provide one."
+    )
+}
 
 #[macro_export]
 macro_rules! def_cells {
     // Uniform group
     {
         @for_uniform_group => &:($( #[$attr:meta] )*):& ->
-        ( $cell_type:ident , $owner_type:ident )
+        (
+            $cell_type:ident , $owner_type:ident ,
+            $marker_pvt_type:ident , $_marker_pub_type:ident ,
+            $owner_pvt_type:ident , $_owner_pub_type:ident ,
+            $cell_pvt_type:ident , $_cell_pub_type:ident ,
+            $impl_type:ident , $marker_impl_type:ident ,
+            $pvt_impl_type:ident , $_pub_impl_type:ident
+        )
     } => {
+        use $crate::*;
         $( #[$attr] )*
-        pub struct GrpMarker ;
+        pub struct UniMarker ;
         $( #[$attr] )*
-        pub type GrpCell<T> = qcell::$cell_type<GrpMarker,T> ;
+        pub type UniCell<T> = qcell::$cell_type<UniMarker,T> ;
         $( #[$attr] )*
-        pub type GrpOwner = qcell::$owner_type<GrpMarker> ;
+        pub type UniOwner = qcell::$owner_type<UniMarker> ;
+
+        impl IsGTUniAccess for UniMarker {}
+        impl IsGTMarker for UniMarker {}
+        impl $impl_type for UniMarker {}
+        impl $pvt_impl_type for UniMarker {}
+        impl $marker_impl_type for UniMarker {}
+        impl $marker_pvt_type for UniMarker {}
+
+        impl<T> IsGTUniAccess for UniCell<T> {}
+        impl<T> $pvt_impl_type for UniCell<T> {}
+        impl<T> $cell_pvt_type for UniCell<T> {}
+
+        impl IsGTUniAccess for UniOwner {}
+        impl $pvt_impl_type for UniOwner {}
+        impl $owner_pvt_type for UniOwner {}
+
+        impl<T> GetEasyUniOwner for UniCell<T> {
+            type OwnerType = UniOwner;
+
+            fn get_new_matching_owner(&self) -> Self::OwnerType {
+                Self::OwnerType::new()
+            }
+
+            fn get_matching_owner_from(&self, src : & impl GetUniOwner<Self::OwnerType>) -> Self::OwnerType {
+                src.get_uniform_owner()
+            }
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn get_cell_impl() -> CellImpl {
+            UniMarker::get_cell_impl()
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_private_access() -> bool {
+            false
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_uniform_access() -> bool {
+            true
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_public_access() -> bool {
+            false
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_private_owner() -> ! {
+            panic!("{}", uni_owner_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_uniform_owner() -> UniOwner {
+            UniOwner::new()
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_public_owner() -> ! {
+            panic!("{}", pub_owner_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_private_cell<T>(_item: T) -> ! {
+            panic!("{}", uni_cell_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_uniform_cell<T>(item: T) -> UniCell<T> {
+            UniCell::new(item)
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_public_cell<T>(_item: T) -> ! {
+            panic!("{}", pub_cell_unavailable_msg())
+        }
     };
 
     // Access group
     {
         @for_access_group => &:($( #[$attr:meta] )*):& ->
-        ( $cell_type:ident , $owner_type:ident )
+        (
+            $cell_type:ident , $owner_type:ident ,
+            $marker_pvt_type:ident , $marker_pub_type:ident ,
+            $owner_pvt_type:ident , $owner_pub_type:ident ,
+            $cell_pvt_type:ident , $cell_pub_type:ident ,
+            $impl_type:ident , $marker_impl_type:ident ,
+            $pvt_impl_type:ident , $pub_impl_type:ident
+        )
     } => {
+        use $crate::*;
         $( #[$attr] )*
         pub struct PubMarker;
         $( #[$attr] )*
         pub type PubCell<T> = qcell::$cell_type<self::PubMarker, T>;
         $( #[$attr] )*
         pub type PubOwner = qcell::$owner_type<self::PubMarker>;
+
+        impl IsGTPubAccess for PubMarker {}
+        impl IsGTMarker for PubMarker {}
+        impl $impl_type for PubMarker {}
+        impl $pub_impl_type for PubMarker {}
+        impl $marker_impl_type for PubMarker {}
+        impl $marker_pub_type for PubMarker {}
+
+        impl<T> IsGTPubAccess for PubCell<T> {}
+        impl<T> $pub_impl_type for PubCell<T> {}
+        impl<T> $cell_pub_type for PubCell<T> {}
+
+        impl IsGTPubAccess for PubOwner {}
+        impl $pub_impl_type for PubOwner {}
+        impl $owner_pub_type for PubOwner {}
+
+        impl<T> GetEasyPubOwner for PubCell<T> {
+            type OwnerType = PubOwner;
+
+            fn get_new_matching_owner(&self) -> Self::OwnerType {
+                Self::OwnerType::new()
+            }
+
+            fn get_matching_owner_from(&self, src : & impl GetPubOwner<Self::OwnerType>) -> Self::OwnerType {
+                src.get_public_owner()
+            }
+        }
     
         $( #[$attr] )*
         pub struct PvtMarker;
@@ -135,43 +1266,334 @@ macro_rules! def_cells {
         pub type PvtCell<T> = qcell::$cell_type<self::PvtMarker, T>;
         $( #[$attr] )*
         pub type PvtOwner = qcell::$owner_type<self::PvtMarker>;
+
+        impl IsGTPvtAccess for PvtMarker {}
+        impl IsGTMarker for PvtMarker {}
+        impl $impl_type for PvtMarker {}
+        impl $pvt_impl_type for PvtMarker {}
+        impl $marker_impl_type for PvtMarker {}
+        impl $marker_pvt_type for PvtMarker {}
+
+        impl<T> IsGTPvtAccess for PvtCell<T> {}
+        impl<T> $pvt_impl_type for PvtCell<T> {}
+        impl<T> $cell_pvt_type for PvtCell<T> {}
+
+        impl IsGTPvtAccess for PvtOwner {}
+        impl $pvt_impl_type for PvtOwner {}
+        impl $owner_pvt_type for PvtOwner {}
+
+        impl<T> GetEasyPvtOwner for PvtCell<T> {
+            type OwnerType = PvtOwner;
+
+            fn get_new_matching_owner(&self) -> Self::OwnerType {
+                Self::OwnerType::new()
+            }
+
+            fn get_matching_owner_from(&self, src : & impl GetPvtOwner<Self::OwnerType>) -> Self::OwnerType {
+                src.get_private_owner()
+            }
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn get_cell_impl() -> CellImpl {
+            PvtMarker::get_cell_impl()
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_private_access() -> bool {
+            true
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_uniform_access() -> bool {
+            false
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_public_access() -> bool {
+            true
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_private_owner() -> PvtOwner {
+            PvtOwner::new()
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_uniform_owner() -> ! {
+            panic!("{}", uni_owner_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_public_owner() -> PubOwner {
+            PubOwner::new()
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_private_cell<T>(item: T) -> PvtCell<T> {
+            PvtCell::new(item)
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_uniform_cell<T>(_item: T) -> ! {
+            panic!("{}", uni_cell_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_public_cell<T>(item: T) -> PubCell<T> {
+            PubCell::new(item)
+        }
     };
 
     // Public group
     {
         @for_public_group => &:($( #[$attr:meta] )*):& ->
-        ( $cell_type:ident , $owner_type:ident )
+        (
+            $cell_type:ident , $owner_type:ident ,
+            $_marker_pvt_type:ident , $marker_pub_type:ident ,
+            $_owner_pvt_type:ident , $owner_pub_type:ident ,
+            $_cell_pvt_type:ident , $cell_pub_type:ident ,
+            $impl_type:ident , $marker_impl_type:ident ,
+            $_pvt_impl_type:ident , $pub_impl_type:ident
+        )
     } => {
+        use $crate::*;
         pub struct PubMarker;
         $( #[$attr] )*
         pub type PubCell<T> = qcell::$cell_type<self::PubMarker, T>;
         $( #[$attr] )*
         pub type PubOwner = qcell::$owner_type<self::PubMarker>;
+
+        impl IsGTPubAccess for PubMarker {}
+        impl IsGTMarker for PubMarker {}
+        impl $impl_type for PubMarker {}
+        impl $pub_impl_type for PubMarker {}
+        impl $marker_impl_type for PubMarker {}
+        impl $marker_pub_type for PubMarker {}
+
+        impl<T> IsGTPubAccess for PubCell<T> {}
+        impl<T> $pub_impl_type for PubCell<T> {}
+        impl<T> $cell_pub_type for PubCell<T> {}
+
+        impl IsGTPubAccess for PubOwner {}
+        impl $pub_impl_type for PubOwner {}
+        impl $owner_pub_type for PubOwner {}
+
+        impl<T> GetEasyPubOwner for PubCell<T> {
+            type OwnerType = PubOwner;
+
+            fn get_new_matching_owner(&self) -> Self::OwnerType {
+                Self::OwnerType::new()
+            }
+
+            fn get_matching_owner_from(&self, src : & impl GetPubOwner<Self::OwnerType>) -> Self::OwnerType {
+                src.get_public_owner()
+            }
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn get_cell_impl() -> CellImpl {
+            PubMarker::get_cell_impl()
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_private_access() -> bool {
+            false
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_uniform_access() -> bool {
+            false
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_public_access() -> bool {
+            true
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_private_owner() -> ! {
+            panic!("{}", pvt_owner_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_uniform_owner() -> ! {
+            panic!("{}", uni_owner_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_public_owner() -> PubOwner {
+            PubOwner::new()
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_private_cell<T>(_item: T) -> ! {
+            panic!("{}", pvt_cell_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_uniform_cell<T>(_item: T) -> ! {
+            panic!("{}", uni_cell_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_public_cell<T>(item: T) -> PubCell<T> {
+            PubCell::new(item)
+        }
     };
 
     // Private group
     {
         @for_private_group => &:($( #[$attr:meta] )*):& ->
-        ( $cell_type:ident , $owner_type:ident )
+        (
+            $cell_type:ident , $owner_type:ident ,
+            $marker_pvt_type:ident , $marker_pub_type:ident ,
+            $owner_pvt_type:ident , $_owner_pub_type:ident ,
+            $cell_pvt_type:ident , $_cell_pub_type:ident ,
+            $impl_type:ident , $marker_impl_type:ident ,
+            $pvt_impl_type:ident , $_pub_impl_type:ident
+        )
     } => {
+        use $crate::*;
         $( #[$attr] )*
         pub struct PvtMarker;
         $( #[$attr] )*
         pub type PvtCell<T> = qcell::$cell_type<self::PvtMarker, T>;
         $( #[$attr] )*
         pub type PvtOwner = qcell::$owner_type<self::PvtMarker>;
+
+        impl IsGTPvtAccess for PvtMarker {}
+        impl IsGTMarker for PvtMarker {}
+        impl $impl_type for PvtMarker {}
+        impl $pvt_impl_type for PvtMarker {}
+        impl $marker_impl_type for PvtMarker {}
+        impl $marker_pvt_type for PvtMarker {}
+
+        impl<T> IsGTPvtAccess for PvtCell<T> {}
+        impl<T> $pvt_impl_type for PvtCell<T> {}
+        impl<T> $cell_pvt_type for PvtCell<T> {}
+
+        impl IsGTPvtAccess for PvtOwner {}
+        impl $pvt_impl_type for PvtOwner {}
+        impl $owner_pvt_type for PvtOwner {}
+
+        impl<T> GetEasyPvtOwner for PvtCell<T> {
+            type OwnerType = PvtOwner;
+
+            fn get_new_matching_owner(&self) -> Self::OwnerType {
+                Self::OwnerType::new()
+            }
+
+            fn get_matching_owner_from(&self, src : & impl GetPvtOwner<Self::OwnerType>) -> Self::OwnerType {
+                src.get_private_owner()
+            }
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn get_cell_impl() -> CellImpl {
+            PvtMarker::get_cell_impl()
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_private_access() -> bool {
+            true
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_uniform_access() -> bool {
+            false
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn has_public_access() -> bool {
+            false
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_private_owner() -> PvtOwner {
+            PvtOwner::new()
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_uniform_owner() -> ! {
+            panic!("{}", uni_owner_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_public_owner() -> ! {
+            panic!("{}", pub_owner_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_private_cell<T>(item: T) -> PvtCell<T> {
+            PvtCell::new(item)
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_uniform_cell<T>(_item: T) -> ! {
+            panic!("{}", uni_cell_unavailable_msg())
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new_public_cell<T>(_item: T) -> ! {
+            panic!("{}", pub_cell_unavailable_msg())
+        }
     };
 
     // Individual evaluations -> uniform
     {
         @for_individual => &:$attrs:tt:& ( $group_visibility:vis mod ) ->
         $cell_mod_name:ident ,
-        ( $cell_type:ident , $owner_type:ident ) , @for_uniform
+        (
+            $cell_type:ident , $owner_type:ident ,
+            $marker_pvt_type:ident , $marker_pub_type:ident ,
+            $owner_pvt_type:ident , $owner_pub_type:ident ,
+            $cell_pvt_type:ident , $cell_pub_type:ident ,
+            $impl_type:ident , $marker_impl_type:ident ,
+            $pvt_impl_type:ident , $pub_impl_type:ident
+        ) , @for_uniform
     } => {
         $group_visibility mod $cell_mod_name {
-            def_cells! {
+            $crate::def_cells! {
                 @for_uniform_group => &:$attrs:& ->
-                ( $cell_type , $owner_type )
+                (
+                    $cell_type , $owner_type ,
+                    $marker_pvt_type , $marker_pub_type ,
+                    $owner_pvt_type , $owner_pub_type ,
+                    $cell_pvt_type , $cell_pub_type ,
+                    $impl_type , $marker_impl_type ,
+                    $pvt_impl_type , $pub_impl_type
+                )
             }
         }
     };
@@ -180,12 +1602,26 @@ macro_rules! def_cells {
     {
         @for_individual => &:$attrs:tt:& ( $group_visibility:vis mod ) ->
         $cell_mod_name:ident ,
-        ( $cell_type:ident , $owner_type:ident ) , @for_access
+        (
+            $cell_type:ident , $owner_type:ident ,
+            $marker_pvt_type:ident , $marker_pub_type:ident ,
+            $owner_pvt_type:ident , $owner_pub_type:ident ,
+            $cell_pvt_type:ident , $cell_pub_type:ident ,
+            $impl_type:ident , $marker_impl_type:ident ,
+            $pvt_impl_type:ident , $pub_impl_type:ident
+        ) , @for_access
     } => {
         $group_visibility mod $cell_mod_name {
-            def_cells! {
+            $crate::def_cells! {
                 @for_access_group => &:$attrs:& ->
-                ( $cell_type , $owner_type )
+                (
+                    $cell_type , $owner_type ,
+                    $marker_pvt_type , $marker_pub_type ,
+                    $owner_pvt_type , $owner_pub_type ,
+                    $cell_pvt_type , $cell_pub_type ,
+                    $impl_type , $marker_impl_type ,
+                    $pvt_impl_type , $pub_impl_type
+                )
             }
         }
     };
@@ -194,12 +1630,26 @@ macro_rules! def_cells {
     {
         @for_individual => &:$attrs:tt:& ( $group_visibility:vis mod ) ->
         $cell_mod_name:ident ,
-        ( $cell_type:ident , $owner_type:ident ) , @for_public
+        (
+            $cell_type:ident , $owner_type:ident ,
+            $marker_pvt_type:ident , $marker_pub_type:ident ,
+            $owner_pvt_type:ident , $owner_pub_type:ident ,
+            $cell_pvt_type:ident , $cell_pub_type:ident ,
+            $impl_type:ident , $marker_impl_type:ident ,
+            $pvt_impl_type:ident , $pub_impl_type:ident
+        ) , @for_public
     } => {
         $group_visibility mod $cell_mod_name {
-            def_cells! {
+            $crate::def_cells! {
                 @for_public_group => &:$attrs:& ->
-                ( $cell_type , $owner_type )
+                (
+                    $cell_type , $owner_type ,
+                    $marker_pvt_type , $marker_pub_type ,
+                    $owner_pvt_type , $owner_pub_type ,
+                    $cell_pvt_type , $cell_pub_type ,
+                    $impl_type , $marker_impl_type ,
+                    $pvt_impl_type , $pub_impl_type
+                )
             }
         }
     };
@@ -208,12 +1658,26 @@ macro_rules! def_cells {
     {
         @for_individual => &:$attrs:tt:& ( $group_visibility:vis mod ) ->
         $cell_mod_name:ident ,
-        ( $cell_type:ident , $owner_type:ident ) , @for_private
+        (
+            $cell_type:ident , $owner_type:ident ,
+            $marker_pvt_type:ident , $marker_pub_type:ident ,
+            $owner_pvt_type:ident , $owner_pub_type:ident ,
+            $cell_pvt_type:ident , $cell_pub_type:ident ,
+            $impl_type:ident , $marker_impl_type:ident ,
+            $pvt_impl_type:ident , $pub_impl_type:ident
+        ) , @for_private
     } => {
         $group_visibility mod $cell_mod_name {
-            def_cells! {
+            $crate::def_cells! {
                 @for_private_group => &:$attrs:& ->
-                ( $cell_type , $owner_type )
+                (
+                    $cell_type , $owner_type ,
+                    $marker_pvt_type , $marker_pub_type ,
+                    $owner_pvt_type , $owner_pub_type ,
+                    $cell_pvt_type , $cell_pub_type ,
+                    $impl_type , $marker_impl_type ,
+                    $pvt_impl_type , $pub_impl_type
+                )
             }
         }
     };
@@ -222,81 +1686,137 @@ macro_rules! def_cells {
     {
         @line =>
         &:$attrs:tt:&
-        $group_visibility:vis mod $cell_mod_name:ident : TCellUniGrp
+        [ $group_visibility:vis mod ] $cell_mod_name:ident : TCellUniGrp
     } => {
-        def_cells! {
+        $crate::def_cells! {
             @for_individual => &:$attrs:& ( $group_visibility mod ) ->
-            $cell_mod_name , ( TCell , TCellOwner ), @for_uniform
+            $cell_mod_name , (
+                TCell , TCellOwner ,
+                IsTUniMarker , IsTUniMarker ,
+                IsTUniOwner , IsTUniOwner ,
+                IsTUniCell , IsTUniCell ,
+                IsTImpl , IsTMarker ,
+                IsTUniAccess , IsTUniAccess
+            ), @for_uniform
         }
     };
     {
         @line =>
         &:$attrs:tt:&
-        $group_visibility:vis mod $cell_mod_name:ident : TCellAccGrp
+        [ $group_visibility:vis mod ] $cell_mod_name:ident : TCellAccGrp
     } => {
-        def_cells! {
+        $crate::def_cells! {
             @for_individual => &:$attrs:& ( $group_visibility mod ) ->
-            $cell_mod_name , ( TCell , TCellOwner ), @for_access
+            $cell_mod_name , (
+                TCell , TCellOwner ,
+                IsTPvtMarker , IsTPubMarker ,
+                IsTPvtOwner , IsTPubOwner ,
+                IsTPvtCell , IsTPubCell ,
+                IsTImpl , IsTMarker ,
+                IsTPvtAccess , IsTPubAccess
+            ), @for_access
         }
     };
     {
         @line =>
         &:$attrs:tt:&
-        $group_visibility:vis mod $cell_mod_name:ident : TLCellUniGrp
+        [ $group_visibility:vis mod ] $cell_mod_name:ident : TLCellUniGrp
     } => {
-        def_cells! {
+        $crate::def_cells! {
             @for_individual => &:$attrs:& ( $group_visibility mod ) ->
-            $cell_mod_name , ( TLCell , TLCellOwner ), @for_uniform
+            $cell_mod_name , (
+                TLCell , TLCellOwner ,
+                IsTLUniMarker , IsTLUniMarker ,
+                IsTLUniOwner , IsTLUniOwner ,
+                IsTLUniCell , IsTLUniCell ,
+                IsTLImpl , IsTLMarker ,
+                IsTLUniAccess , IsTLUniAccess
+            ), @for_uniform
         }
     };
     {
         @line =>
         &:$attrs:tt:&
-        $group_visibility:vis mod $cell_mod_name:ident : TLCellAccGrp
+        [ $group_visibility:vis mod ] $cell_mod_name:ident : TLCellAccGrp
     } => {
-        def_cells! {
+        $crate::def_cells! {
             @for_individual => &:$attrs:& ( $group_visibility mod ) ->
-            $cell_mod_name , ( TLCell , TLCellOwner ), @for_access
+            $cell_mod_name , (
+                TLCell , TLCellOwner ,
+                IsTLPvtMarker , IsTLPubMarker ,
+                IsTLPvtOwner , IsTLPubOwner ,
+                IsTLPvtCell , IsTLPubCell ,
+                IsTLImpl , IsTLMarker ,
+                IsTLPvtAccess , IsTLPubAccess
+            ), @for_access
         }
     };
     {
         @line =>
         &:$attrs:tt:&
-        $group_visibility:vis mod $cell_mod_name:ident : TCellPubGrp
+        [ $group_visibility:vis mod ] $cell_mod_name:ident : TCellPubGrp
     } => {
-        def_cells! {
+        $crate::def_cells! {
             @for_individual => &:$attrs:& ( $group_visibility mod ) ->
-            $cell_mod_name , ( TCell , TCellOwner ), @for_public
+            $cell_mod_name , (
+                TCell , TCellOwner ,
+                IsTPubMarker , IsTPubMarker ,
+                IsTPubOwner , IsTPubOwner ,
+                IsTPubCell , IsTPubCell ,
+                IsTImpl , IsTMarker ,
+                IsTPubAccess , IsTPubAccess
+            ), @for_public
         }
     };
     {
         @line =>
         &:$attrs:tt:&
-        $group_visibility:vis mod $cell_mod_name:ident : TCellPvtGrp
+        [ $group_visibility:vis mod ] $cell_mod_name:ident : TCellPvtGrp
     } => {
-        def_cells! {
+        $crate::def_cells! {
             @for_individual => &:$attrs:& ( $group_visibility mod ) ->
-            $cell_mod_name , ( TCell , TCellOwner ), @for_private
+            $cell_mod_name , (
+                TCell , TCellOwner ,
+                IsTPvtMarker , IsTPvtMarker ,
+                IsTPvtOwner , IsTPvtOwner ,
+                IsTPvtCell , IsTPvtCell ,
+                IsTImpl , IsTMarker ,
+                IsTPvtAccess , IsTPvtAccess
+            ), @for_private
         }
     };
     {
         @line =>
         &:$attrs:tt:&
-        $group_visibility:vis mod $cell_mod_name:ident : TLCellPubGrp
+        [ $group_visibility:vis mod ] $cell_mod_name:ident : TLCellPubGrp
     } => {
-        def_cells! {
+        $crate::def_cells! {
             @for_individual => &:$attrs:& ( $group_visibility mod ) ->
-            $cell_mod_name , ( TLCell , TLCellOwner ), @for_public
+            $cell_mod_name , (
+                TLCell , TLCellOwner ,
+                IsTLPubMarker , IsTLPubMarker ,
+                IsTLPubOwner , IsTLPubOwner ,
+                IsTLPubCell , IsTLPubCell ,
+                IsTLImpl , IsTLMarker ,
+                IsTLPubAccess , IsTLPubAccess
+            ), @for_public
         }
     };
     {
         @line =>
         &:$attrs:tt:&
-        $group_visibility:vis mod $cell_mod_name:ident : TLCellPvtGrp
+        [ $group_visibility:vis mod ] $cell_mod_name:ident : TLCellPvtGrp
     } => {
-        def_cells! {
+        $crate::def_cells! {
             @for_individual => &:$attrs:& ( $group_visibility mod ) ->
-            $cell_mod_name , ( TLCell , TLCellOwner ), @for_private
+            $cell_mod_name , (
+                TLCell , TLCellOwner ,
+                IsTLPvtMarker , IsTLPvtMarker ,
+                IsTLPvtOwner , IsTLPvtOwner ,
+                IsTLPvtCell , IsTLPvtCell ,
+                IsTLImpl , IsTLMarker ,
+                IsTLPvtAccess , IsTLPvtAccess
+            ), @for_private
         }
     };
 
@@ -311,13 +1831,13 @@ macro_rules! def_cells {
         ),+ }
     } => {
         $(
-            $( def_cells! {
+            $( $crate::def_cells! {
                 @line =>
                 &:$attrs:&
-                pub mod $short_straw : $short_category
+                [ pub mod ] $short_straw : $short_category
             } )?
             $( pub mod $short_straw {
-                def_cells! {
+                $crate::def_cells! {
                     @check_cluster => &:$attrs:& $extension
                 }
             } )?
@@ -327,10 +1847,10 @@ macro_rules! def_cells {
     {
         @line =>
         &:$attrs:tt:&
-        $group_visibility:vis mod $cell_mod_name:ident :: $more_cells:tt
+        [ $group_visibility:vis mod ] $cell_mod_name:ident :: $more_cells:tt
     } => {
         $group_visibility mod $cell_mod_name {
-            def_cells! {
+            $crate::def_cells! {
                 @check_cluster => &:$attrs:& $more_cells
             }
         }
@@ -340,19 +1860,19 @@ macro_rules! def_cells {
     {
         $(
             $( #[$attr:meta] )*
-            $group_visibility:vis mod
+            [ $group_visibility:vis mod ]
             $header:ident
-            $( : $category:ident )?
-            $( :: $cluster:tt )? $(;)+
+            $( :: $cluster:tt ; )?
+            $( : $category:ident ; )? $(;)*
         )+
     } => {
         $(
-            def_cells! { @line =>
+            $crate::def_cells! { @line =>
                 &:( $( #[$attr])* ):&
-                $group_visibility mod
+                [ $group_visibility mod ]
                 $header
-                $( : $category )?
                 $( :: $cluster )?
+                $( : $category )?
             }
         )+
     };
@@ -365,8 +1885,934 @@ mod tests {
     //TODO: How to publish a library crate:
     //https://karthikrathinavel8.medium.com/how-to-create-and-publish-a-rust-library-85c4d25132b2
 
+    //TODO: Add some tests to show this off
+    //TODO: DOCUMENTATION, BOI
+
+    fn got_value<T>(item: T) {
+        assert!(std::option::Option::Some(item).is_some())
+    }
+
     #[test]
-    fn it_works() {
-        //
+    fn t_uni_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellUniGrp;
+        }
+        assert_eq!(test_grp::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::has_private_access(), false);
+        assert_eq!(test_grp::has_uniform_access(), true);
+        assert_eq!(test_grp::has_public_access(), false);
+
+        assert_eq!(test_grp::UniMarker::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::UniMarker::get_cell_role(), CellRoles::Marker);
+        assert_eq!(test_grp::UniMarker::get_access_level(), CellAccessLevels::Uniform);
+
+        assert_eq!(test_grp::UniOwner::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::UniOwner::get_cell_role(), CellRoles::Owner);
+        assert_eq!(test_grp::UniOwner::get_access_level(), CellAccessLevels::Uniform);
+
+        assert_eq!(test_grp::UniCell::<i32>::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::UniCell::<i32>::get_cell_role(), CellRoles::Cell);
+        assert_eq!(test_grp::UniCell::<i32>::get_access_level(), CellAccessLevels::Uniform);
+
+        let test_owner = test_grp::UniOwner::new();
+
+        assert_eq!(test_owner.get_self_cell_impl(), CellImpl::T);
+        assert_eq!(test_owner.get_self_cell_role(), CellRoles::Owner);
+        assert_eq!(test_owner.get_self_access_level(), CellAccessLevels::Uniform);
+
+        let test_cell = test_grp::UniCell::new(1);
+
+        assert_eq!(test_cell.get_self_cell_impl(), CellImpl::T);
+        assert_eq!(test_cell.get_self_cell_role(), CellRoles::Cell);
+        assert_eq!(test_cell.get_self_access_level(), CellAccessLevels::Uniform);
+    }
+
+    #[test]
+    #[should_panic]
+    fn t_uni_pvt_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellUniGrp;
+        }
+        test_grp::new_private_owner();
+    }
+
+    #[test]
+    fn t_uni_uni_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellUniGrp;
+        }
+        got_value(test_grp::new_uniform_owner());
+    }
+
+    #[test]
+    #[should_panic]
+    fn t_uni_pub_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellUniGrp;
+        }
+        test_grp::new_public_owner();
+    }
+
+    #[test]
+    fn tl_uni_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellUniGrp;
+        }
+        assert_eq!(test_grp::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::has_private_access(), false);
+        assert_eq!(test_grp::has_uniform_access(), true);
+        assert_eq!(test_grp::has_public_access(), false);
+
+        assert_eq!(test_grp::UniMarker::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::UniMarker::get_cell_role(), CellRoles::Marker);
+        assert_eq!(test_grp::UniMarker::get_access_level(), CellAccessLevels::Uniform);
+
+        assert_eq!(test_grp::UniOwner::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::UniOwner::get_cell_role(), CellRoles::Owner);
+        assert_eq!(test_grp::UniOwner::get_access_level(), CellAccessLevels::Uniform);
+
+        assert_eq!(test_grp::UniCell::<i32>::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::UniCell::<i32>::get_cell_role(), CellRoles::Cell);
+        assert_eq!(test_grp::UniCell::<i32>::get_access_level(), CellAccessLevels::Uniform);
+
+        let test_owner = test_grp::UniOwner::new();
+
+        assert_eq!(test_owner.get_self_cell_impl(), CellImpl::TL);
+        assert_eq!(test_owner.get_self_cell_role(), CellRoles::Owner);
+        assert_eq!(test_owner.get_self_access_level(), CellAccessLevels::Uniform);
+
+        let test_cell = test_grp::UniCell::new(1);
+
+        assert_eq!(test_cell.get_self_cell_impl(), CellImpl::TL);
+        assert_eq!(test_cell.get_self_cell_role(), CellRoles::Cell);
+        assert_eq!(test_cell.get_self_access_level(), CellAccessLevels::Uniform);
+    }
+
+    #[test]
+    #[should_panic]
+    fn tl_uni_pvt_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellUniGrp;
+        }
+        test_grp::new_private_owner();
+    }
+
+    #[test]
+    fn tl_uni_uni_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellUniGrp;
+        }
+        got_value(test_grp::new_uniform_owner());
+    }
+
+    #[test]
+    #[should_panic]
+    fn tl_uni_pub_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellUniGrp;
+        }
+        test_grp::new_public_owner();
+    }
+
+    #[test]
+    fn t_pvt_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellPvtGrp;
+        }
+        assert_eq!(test_grp::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::has_private_access(), true);
+        assert_eq!(test_grp::has_uniform_access(), false);
+        assert_eq!(test_grp::has_public_access(), false);
+
+        assert_eq!(test_grp::PvtMarker::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PvtMarker::get_cell_role(), CellRoles::Marker);
+        assert_eq!(test_grp::PvtMarker::get_access_level(), CellAccessLevels::Private);
+
+        assert_eq!(test_grp::PvtOwner::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PvtOwner::get_cell_role(), CellRoles::Owner);
+        assert_eq!(test_grp::PvtOwner::get_access_level(), CellAccessLevels::Private);
+
+        assert_eq!(test_grp::PvtCell::<i32>::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PvtCell::<i32>::get_cell_role(), CellRoles::Cell);
+        assert_eq!(test_grp::PvtCell::<i32>::get_access_level(), CellAccessLevels::Private);
+
+        let test_owner = test_grp::PvtOwner::new();
+
+        assert_eq!(test_owner.get_self_cell_impl(), CellImpl::T);
+        assert_eq!(test_owner.get_self_cell_role(), CellRoles::Owner);
+        assert_eq!(test_owner.get_self_access_level(), CellAccessLevels::Private);
+
+        let test_cell = test_grp::PvtCell::new(1);
+
+        assert_eq!(test_cell.get_self_cell_impl(), CellImpl::T);
+        assert_eq!(test_cell.get_self_cell_role(), CellRoles::Cell);
+        assert_eq!(test_cell.get_self_access_level(), CellAccessLevels::Private);
+    }
+
+    #[test]
+    fn t_pvt_pvt_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellPvtGrp;
+        }
+        got_value(test_grp::new_private_owner());
+    }
+
+    #[test]
+    #[should_panic]
+    fn t_pvt_uni_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellPvtGrp;
+        }
+        test_grp::new_uniform_owner();
+    }
+
+    #[test]
+    #[should_panic]
+    fn t_pvt_pub_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellPvtGrp;
+        }
+        test_grp::new_public_owner();
+    }
+
+    #[test]
+    fn tl_pvt_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellPvtGrp;
+        }
+        assert_eq!(test_grp::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::has_private_access(), true);
+        assert_eq!(test_grp::has_uniform_access(), false);
+        assert_eq!(test_grp::has_public_access(), false);
+
+        assert_eq!(test_grp::PvtMarker::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PvtMarker::get_cell_role(), CellRoles::Marker);
+        assert_eq!(test_grp::PvtMarker::get_access_level(), CellAccessLevels::Private);
+
+        assert_eq!(test_grp::PvtOwner::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PvtOwner::get_cell_role(), CellRoles::Owner);
+        assert_eq!(test_grp::PvtOwner::get_access_level(), CellAccessLevels::Private);
+
+        assert_eq!(test_grp::PvtCell::<i32>::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PvtCell::<i32>::get_cell_role(), CellRoles::Cell);
+        assert_eq!(test_grp::PvtCell::<i32>::get_access_level(), CellAccessLevels::Private);
+
+        let test_owner = test_grp::PvtOwner::new();
+
+        assert_eq!(test_owner.get_self_cell_impl(), CellImpl::TL);
+        assert_eq!(test_owner.get_self_cell_role(), CellRoles::Owner);
+        assert_eq!(test_owner.get_self_access_level(), CellAccessLevels::Private);
+
+        let test_cell = test_grp::PvtCell::new(1);
+
+        assert_eq!(test_cell.get_self_cell_impl(), CellImpl::TL);
+        assert_eq!(test_cell.get_self_cell_role(), CellRoles::Cell);
+        assert_eq!(test_cell.get_self_access_level(), CellAccessLevels::Private);
+    }
+
+    #[test]
+    fn tl_pvt_pvt_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellPvtGrp;
+        }
+        got_value(test_grp::new_private_owner());
+    }
+
+    #[test]
+    #[should_panic]
+    fn tl_pvt_uni_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellPvtGrp;
+        }
+        test_grp::new_uniform_owner();
+    }
+
+    #[test]
+    #[should_panic]
+    fn tl_pvt_pub_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellPvtGrp;
+        }
+        test_grp::new_public_owner();
+    }
+
+    #[test]
+    fn t_pub_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellPubGrp;
+        }
+        assert_eq!(test_grp::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::has_private_access(), false);
+        assert_eq!(test_grp::has_uniform_access(), false);
+        assert_eq!(test_grp::has_public_access(), true);
+
+        assert_eq!(test_grp::PubMarker::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PubMarker::get_cell_role(), CellRoles::Marker);
+        assert_eq!(test_grp::PubMarker::get_access_level(), CellAccessLevels::Public);
+
+        assert_eq!(test_grp::PubOwner::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PubOwner::get_cell_role(), CellRoles::Owner);
+        assert_eq!(test_grp::PubOwner::get_access_level(), CellAccessLevels::Public);
+
+        assert_eq!(test_grp::PubCell::<i32>::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PubCell::<i32>::get_cell_role(), CellRoles::Cell);
+        assert_eq!(test_grp::PubCell::<i32>::get_access_level(), CellAccessLevels::Public);
+
+        let test_owner = test_grp::PubOwner::new();
+
+        assert_eq!(test_owner.get_self_cell_impl(), CellImpl::T);
+        assert_eq!(test_owner.get_self_cell_role(), CellRoles::Owner);
+        assert_eq!(test_owner.get_self_access_level(), CellAccessLevels::Public);
+
+        let test_cell = test_grp::PubCell::new(1);
+
+        assert_eq!(test_cell.get_self_cell_impl(), CellImpl::T);
+        assert_eq!(test_cell.get_self_cell_role(), CellRoles::Cell);
+        assert_eq!(test_cell.get_self_access_level(), CellAccessLevels::Public);
+    }
+
+    #[test]
+    #[should_panic]
+    fn t_pub_pvt_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellPubGrp;
+        }
+        test_grp::new_private_owner();
+    }
+
+    #[test]
+    #[should_panic]
+    fn t_pub_uni_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellPubGrp;
+        }
+        test_grp::new_uniform_owner();
+    }
+
+    #[test]
+    fn t_pub_pub_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellPubGrp;
+        }
+        got_value(test_grp::new_public_owner());
+    }
+
+    #[test]
+    fn tl_pub_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellPubGrp;
+        }
+
+        assert_eq!(test_grp::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::has_private_access(), false);
+        assert_eq!(test_grp::has_uniform_access(), false);
+        assert_eq!(test_grp::has_public_access(), true);
+
+        assert_eq!(test_grp::PubMarker::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PubMarker::get_cell_role(), CellRoles::Marker);
+        assert_eq!(test_grp::PubMarker::get_access_level(), CellAccessLevels::Public);
+
+        assert_eq!(test_grp::PubOwner::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PubOwner::get_cell_role(), CellRoles::Owner);
+        assert_eq!(test_grp::PubOwner::get_access_level(), CellAccessLevels::Public);
+
+        assert_eq!(test_grp::PubCell::<i32>::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PubCell::<i32>::get_cell_role(), CellRoles::Cell);
+        assert_eq!(test_grp::PubCell::<i32>::get_access_level(), CellAccessLevels::Public);
+
+        let test_owner = test_grp::PubOwner::new();
+
+        assert_eq!(test_owner.get_self_cell_impl(), CellImpl::TL);
+        assert_eq!(test_owner.get_self_cell_role(), CellRoles::Owner);
+        assert_eq!(test_owner.get_self_access_level(), CellAccessLevels::Public);
+
+        let test_cell = test_grp::PubCell::new(1);
+
+        assert_eq!(test_cell.get_self_cell_impl(), CellImpl::TL);
+        assert_eq!(test_cell.get_self_cell_role(), CellRoles::Cell);
+        assert_eq!(test_cell.get_self_access_level(), CellAccessLevels::Public);
+    }
+
+    #[test]
+    #[should_panic]
+    fn tl_pub_pvt_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellPubGrp;
+        }
+        test_grp::new_private_owner();
+    }
+
+    #[test]
+    #[should_panic]
+    fn tl_pub_uni_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellPubGrp;
+        }
+        test_grp::new_uniform_owner();
+    }
+
+    #[test]
+    fn tl_pub_pub_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellPubGrp;
+        }
+        got_value(test_grp::new_public_owner());
+    }
+
+    #[test]
+    fn t_acc_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellAccGrp;
+        }
+        assert_eq!(test_grp::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::has_private_access(), true);
+        assert_eq!(test_grp::has_uniform_access(), false);
+        assert_eq!(test_grp::has_public_access(), true);
+
+        assert_eq!(test_grp::PubMarker::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PubMarker::get_cell_role(), CellRoles::Marker);
+        assert_eq!(test_grp::PubMarker::get_access_level(), CellAccessLevels::Public);
+
+        assert_eq!(test_grp::PubOwner::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PubOwner::get_cell_role(), CellRoles::Owner);
+        assert_eq!(test_grp::PubOwner::get_access_level(), CellAccessLevels::Public);
+
+        assert_eq!(test_grp::PubCell::<i32>::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PubCell::<i32>::get_cell_role(), CellRoles::Cell);
+        assert_eq!(test_grp::PubCell::<i32>::get_access_level(), CellAccessLevels::Public);
+
+        let test_owner = test_grp::PubOwner::new();
+
+        assert_eq!(test_owner.get_self_cell_impl(), CellImpl::T);
+        assert_eq!(test_owner.get_self_cell_role(), CellRoles::Owner);
+        assert_eq!(test_owner.get_self_access_level(), CellAccessLevels::Public);
+
+        let test_cell = test_grp::PubCell::new(1);
+
+        assert_eq!(test_cell.get_self_cell_impl(), CellImpl::T);
+        assert_eq!(test_cell.get_self_cell_role(), CellRoles::Cell);
+        assert_eq!(test_cell.get_self_access_level(), CellAccessLevels::Public);
+
+        assert_eq!(test_grp::PvtMarker::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PvtMarker::get_cell_role(), CellRoles::Marker);
+        assert_eq!(test_grp::PvtMarker::get_access_level(), CellAccessLevels::Private);
+
+        assert_eq!(test_grp::PvtOwner::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PvtOwner::get_cell_role(), CellRoles::Owner);
+        assert_eq!(test_grp::PvtOwner::get_access_level(), CellAccessLevels::Private);
+
+        assert_eq!(test_grp::PvtCell::<i32>::get_cell_impl(), CellImpl::T);
+        assert_eq!(test_grp::PvtCell::<i32>::get_cell_role(), CellRoles::Cell);
+        assert_eq!(test_grp::PvtCell::<i32>::get_access_level(), CellAccessLevels::Private);
+
+        let test_owner = test_grp::PvtOwner::new();
+
+        assert_eq!(test_owner.get_self_cell_impl(), CellImpl::T);
+        assert_eq!(test_owner.get_self_cell_role(), CellRoles::Owner);
+        assert_eq!(test_owner.get_self_access_level(), CellAccessLevels::Private);
+
+        let test_cell = test_grp::PvtCell::new(1);
+
+        assert_eq!(test_cell.get_self_cell_impl(), CellImpl::T);
+        assert_eq!(test_cell.get_self_cell_role(), CellRoles::Cell);
+        assert_eq!(test_cell.get_self_access_level(), CellAccessLevels::Private);
+    }
+
+    #[test]
+    fn t_acc_pvt_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellAccGrp;
+        }
+        got_value(test_grp::new_private_owner());
+    }
+
+    #[test]
+    #[should_panic]
+    fn t_acc_uni_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellAccGrp;
+        }
+        test_grp::new_uniform_owner();
+    }
+
+    #[test]
+    fn t_acc_pub_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TCellAccGrp;
+        }
+        got_value(test_grp::new_public_owner());
+    }
+
+    #[test]
+    fn tl_acc_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellAccGrp;
+        }
+        assert_eq!(test_grp::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::has_private_access(), true);
+        assert_eq!(test_grp::has_uniform_access(), false);
+        assert_eq!(test_grp::has_public_access(), true);
+
+        assert_eq!(test_grp::PubMarker::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PubMarker::get_cell_role(), CellRoles::Marker);
+        assert_eq!(test_grp::PubMarker::get_access_level(), CellAccessLevels::Public);
+
+        assert_eq!(test_grp::PubOwner::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PubOwner::get_cell_role(), CellRoles::Owner);
+        assert_eq!(test_grp::PubOwner::get_access_level(), CellAccessLevels::Public);
+
+        assert_eq!(test_grp::PubCell::<i32>::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PubCell::<i32>::get_cell_role(), CellRoles::Cell);
+        assert_eq!(test_grp::PubCell::<i32>::get_access_level(), CellAccessLevels::Public);
+
+        let test_owner = test_grp::PubOwner::new();
+
+        assert_eq!(test_owner.get_self_cell_impl(), CellImpl::TL);
+        assert_eq!(test_owner.get_self_cell_role(), CellRoles::Owner);
+        assert_eq!(test_owner.get_self_access_level(), CellAccessLevels::Public);
+
+        let test_cell = test_grp::PubCell::new(1);
+
+        assert_eq!(test_cell.get_self_cell_impl(), CellImpl::TL);
+        assert_eq!(test_cell.get_self_cell_role(), CellRoles::Cell);
+        assert_eq!(test_cell.get_self_access_level(), CellAccessLevels::Public);
+
+        assert_eq!(test_grp::PvtMarker::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PvtMarker::get_cell_role(), CellRoles::Marker);
+        assert_eq!(test_grp::PvtMarker::get_access_level(), CellAccessLevels::Private);
+
+        assert_eq!(test_grp::PvtOwner::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PvtOwner::get_cell_role(), CellRoles::Owner);
+        assert_eq!(test_grp::PvtOwner::get_access_level(), CellAccessLevels::Private);
+
+        assert_eq!(test_grp::PvtCell::<i32>::get_cell_impl(), CellImpl::TL);
+        assert_eq!(test_grp::PvtCell::<i32>::get_cell_role(), CellRoles::Cell);
+        assert_eq!(test_grp::PvtCell::<i32>::get_access_level(), CellAccessLevels::Private);
+
+        let test_owner = test_grp::PvtOwner::new();
+
+        assert_eq!(test_owner.get_self_cell_impl(), CellImpl::TL);
+        assert_eq!(test_owner.get_self_cell_role(), CellRoles::Owner);
+        assert_eq!(test_owner.get_self_access_level(), CellAccessLevels::Private);
+
+        let test_cell = test_grp::PvtCell::new(1);
+
+        assert_eq!(test_cell.get_self_cell_impl(), CellImpl::TL);
+        assert_eq!(test_cell.get_self_cell_role(), CellRoles::Cell);
+        assert_eq!(test_cell.get_self_access_level(), CellAccessLevels::Private);
+    }
+
+    #[test]
+    fn tl_acc_pvt_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellAccGrp;
+        }
+        got_value(test_grp::new_private_owner());
+    }
+
+    #[test]
+    #[should_panic]
+    fn tl_acc_uni_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellAccGrp;
+        }
+        test_grp::new_uniform_owner();
+    }
+
+    #[test]
+    fn tl_acc_pub_owner_declaration_accuracy_test() {
+        def_cells! {
+            [pub mod] test_grp: TLCellAccGrp;
+        }
+        got_value(test_grp::new_public_owner());
+    }
+
+    #[test]
+    fn branching_modules_test() {
+        def_cells! {
+            [pub mod] test_grp0::{test_grp1: TLCellUniGrp};
+            [pub mod] test_grp2::{
+                test_grp3::{test_grp4: TLCellPvtGrp},
+                test_grp5: TLCellPubGrp
+            };
+            [pub mod] test_grp6::{test_grp7::{test_grp8: TLCellAccGrp}};
+        }
+        assert!(test_grp0::test_grp1::has_uniform_access());
+        assert!(test_grp2::test_grp3::test_grp4::has_private_access());
+        assert!(test_grp2::test_grp5::has_public_access());
+        assert_eq!(test_grp6::test_grp7::test_grp8::has_uniform_access(), false);
+    }
+
+    #[test]
+    fn default_returns_test() {
+        {
+            create_t_group!(TestOwnerT[MarkerT] => TestCellT<T>);
+            let def_cell = TestCellT::new(1);
+            let def_owner = TestOwnerT::new();
+
+            assert_eq!(MarkerT::get_cell_impl(), CellImpl::T);
+            assert_eq!(TestCellT::<i32>::get_cell_impl(), CellImpl::T);
+            assert_eq!(TestOwnerT::get_cell_impl(), CellImpl::T);
+            assert_eq!(MarkerT::get_cell_role(), CellRoles::Marker);
+            assert_eq!(TestCellT::<i32>::get_cell_role(), CellRoles::Cell);
+            assert_eq!(TestOwnerT::get_cell_role(), CellRoles::Owner);
+            assert_eq!(MarkerT::get_access_level(), CellAccessLevels::Uniform);
+            assert_eq!(TestCellT::<i32>::get_access_level(), CellAccessLevels::Uniform);
+            assert_eq!(TestOwnerT::get_access_level(), CellAccessLevels::Uniform);
+
+            assert_eq!(def_cell.get_self_cell_impl(), CellImpl::T);
+            assert_eq!(def_owner.get_self_cell_impl(), CellImpl::T);
+            assert_eq!(def_cell.get_self_cell_role(), CellRoles::Cell);
+            assert_eq!(def_owner.get_self_cell_role(), CellRoles::Owner);
+            assert_eq!(def_cell.get_self_access_level(), CellAccessLevels::Uniform);
+            assert_eq!(def_owner.get_self_access_level(), CellAccessLevels::Uniform);
+        } {
+            create_tl_group!(TestOwnerTL[MarkerTL] => TestCellTL<T>);
+            let def_cell = TestCellTL::new(1);
+            let def_owner = TestOwnerTL::new();
+
+            assert_eq!(MarkerTL::get_cell_impl(), CellImpl::TL);
+            assert_eq!(TestCellTL::<i32>::get_cell_impl(), CellImpl::TL);
+            assert_eq!(TestOwnerTL::get_cell_impl(), CellImpl::TL);
+            assert_eq!(MarkerTL::get_cell_role(), CellRoles::Marker);
+            assert_eq!(TestCellTL::<i32>::get_cell_role(), CellRoles::Cell);
+            assert_eq!(TestOwnerTL::get_cell_role(), CellRoles::Owner);
+            assert_eq!(MarkerTL::get_access_level(), CellAccessLevels::Uniform);
+            assert_eq!(TestCellTL::<i32>::get_access_level(), CellAccessLevels::Uniform);
+            assert_eq!(TestOwnerTL::get_access_level(), CellAccessLevels::Uniform);
+
+            assert_eq!(def_cell.get_self_cell_impl(), CellImpl::TL);
+            assert_eq!(def_owner.get_self_cell_impl(), CellImpl::TL);
+            assert_eq!(def_cell.get_self_cell_role(), CellRoles::Cell);
+            assert_eq!(def_owner.get_self_cell_role(), CellRoles::Owner);
+            assert_eq!(def_cell.get_self_access_level(), CellAccessLevels::Uniform);
+            assert_eq!(def_owner.get_self_access_level(), CellAccessLevels::Uniform);
+        }
+    }
+
+    #[test]
+    fn individual_builder_grammar_tests() {
+        new_t_marker_type!(pub TestTMarkerA);
+        new_t_cell_type!(pub TestTCellA<T>[TestTMarkerA]);
+        new_t_owner_type!(pub TestTOwnerA[TestTMarkerA]);
+
+        new_tl_marker_type!(TestTLMarkerA);
+        new_tl_cell_type!(TestTLCellA<T>[TestTLMarkerA]);
+        new_tl_owner_type!(TestTLOwnerA[TestTLMarkerA]);
+
+        new_t_marker_type!(TestTMarkerB);
+        new_t_cell_type!(TestTCellB[TestTMarkerB]<T>);
+        new_t_owner_type!(TestTOwnerB[TestTMarkerB]);
+
+        new_tl_marker_type!(TestTLMarkerB);
+        new_tl_cell_type!(TestTLCellB[TestTLMarkerB]<T>);
+        new_tl_owner_type!(TestTLOwnerB[TestTLMarkerB]);
+
+        new_t_marker_type!(TestTMarkerC);
+        new_t_cell_type!(TestTCellC[TestTMarkerC]);
+        new_t_owner_type!(TestTOwnerC[TestTMarkerC]);
+
+        new_tl_marker_type!(TestTLMarkerC);
+        new_tl_cell_type!(TestTLCellC[TestTLMarkerC]);
+        new_tl_owner_type!(TestTLOwnerC[TestTLMarkerC]);
+
+        create_t_group!(TestTOwnerD[TestTMarkerD] => TestTCellD<T>);
+        create_t_group!(TestTOwnerE[TestTMarkerE] => TestTCellE);
+
+        create_tl_group!(TestTLOwnerD[TestTLMarkerD] => TestTLCellD<T>);
+        create_tl_group!(TestTLOwnerF[TestTLMarkerF] => TestTLCellF);
+
+        create_t_group! {
+            marker: TestTMarkerG,
+            owner: TestTOwnerG,
+            cell: TestTCellG<T>
+        }
+        create_t_group! {
+            marker: TestTMarkerH,
+            owner: TestTOwnerH,
+            cell: TestTCellH
+        }
+
+        create_tl_group! {
+            marker: TestTLMarkerG,
+            owner: TestTLOwnerG,
+            cell: TestTLCellG<T>
+        }
+        create_tl_group! {
+            marker: TestTLMarkerH,
+            owner: TestTLOwnerH,
+            cell: TestTLCellH
+        }
+
+        create_t_group! {
+            pub marker: TestTMarkerI,
+            pub owner: TestTOwnerI,
+            pub cell: TestTCellI<T>
+        }
+        create_t_group! {
+            marker: TestTMarkerJ,
+            cell: TestTCellJ,
+            owner: TestTOwnerJ
+        }
+
+        create_tl_group! {
+            owner: TestTLOwnerI,
+            marker: TestTLMarkerI,
+            cell: TestTLCellI<T>
+        }
+        create_tl_group! {
+            cell: TestTLCellJ,
+            marker: TestTLMarkerJ,
+            owner: TestTLOwnerJ
+        }
+    }
+
+    #[test]
+    fn default_impl_grammar_tests() {
+        def_cells! {
+            [mod] test_uni_grp: TLCellUniGrp;
+            [mod] test_pvt_grp: TLCellPvtGrp;
+            [mod] test_pub_grp: TLCellPubGrp;
+        }
+
+        struct MyStruct {
+            //
+        }
+
+        impl MyStruct {
+            fn do_test(&self) {
+                let owner = self.get_uniform_owner();
+                got_value(&owner);
+
+                let owner = self.get_private_owner();
+                got_value(&owner);
+
+                let owner = self.get_public_owner();
+                got_value(&owner);
+            }
+        }
+
+        impl_get_pvt!(MyStruct => test_pvt_grp::PvtOwner);
+        impl_get_pub!(MyStruct => test_pub_grp::PubOwner);
+        impl_get_uni!(MyStruct => test_uni_grp::UniOwner);
+
+        let test_struct = MyStruct { };
+
+        test_struct.do_test();
+    }
+
+    #[test]
+    fn c_scp_grammar_tests() {
+        def_cells! {
+            [mod] test_uni_grp: TLCellUniGrp;
+            [mod] test_uni_grp2: TLCellUniGrp;
+        }
+
+        struct MyStruct {
+            test_cell: test_uni_grp::UniCell<i32>,
+            test_cell2: test_uni_grp2::UniCell<i32>
+        }
+
+        impl MyStruct {
+            fn do_test(&self) {
+                // Mutable internal modification
+                c_scp! {
+                    use test_uni_grp::UniOwner => (
+                        self.test_cell => &mut test_cont
+                    ) {
+                        *test_cont += 1;
+                        assert_eq!(*test_cont, 6);
+                    }
+                }
+                // Internal immutable
+                c_scp! {
+                    use test_uni_grp::UniOwner => (
+                        self.test_cell => & test_cont
+                    ) {
+                        assert_eq!(*test_cont, 6);
+                    }
+                }
+                // Internal immutable (checking for optional borrow)
+                c_scp! {
+                    use test_uni_grp::UniOwner => (
+                        self.test_cell => test_cont
+                    ) {
+                        assert_eq!(*test_cont, 6);
+                    }
+                }
+                // Mutable internal modification (deref early)
+                c_scp! {
+                    use test_uni_grp::UniOwner => (
+                        self.test_cell => *mut test_cont
+                    ) {
+                        test_cont += 1;
+                        assert_eq!(test_cont, 7);
+                    }
+                }
+                // Internal immutable (deref early)
+                c_scp! {
+                    use test_uni_grp::UniOwner => (
+                        self.test_cell => * test_cont
+                    ) {
+                        assert_eq!(test_cont, 6);
+                    }
+                }
+                // Internal immutable (hard borrow)
+                c_scp! {
+                    use test_uni_grp::UniOwner => (
+                        self.test_cell => & test_cont
+                    ) {
+                        assert_eq!(test_cont, &6);
+                    }
+                }
+                // Mutable internal modification (auto; deref early)
+                c_scp! {
+                    use _ => (
+                        self.test_cell => *mut test_cont
+                    ) {
+                        test_cont += 1;
+                        assert_eq!(test_cont, 7);
+                    }
+                }
+                // Internal immutable (auto; deref early)
+                c_scp! {
+                    use _ => (
+                        self.test_cell => * test_cont
+                    ) {
+                        assert_eq!(test_cont, 6);
+                    }
+                }
+                // Mutable internal modification (struct-auto; deref early)
+                c_scp! {
+                    use [self] => (
+                        self.test_cell => *mut test_cont
+                    ) {
+                        test_cont += 1;
+                        assert_eq!(test_cont, 7);
+                    }
+                }
+                // Internal immutable (struct-auto; deref early)
+                c_scp! {
+                    use [self] => (
+                        self.test_cell => * test_cont
+                    ) {
+                        assert_eq!(test_cont, 6);
+                    }
+                }
+
+                // Start testing external scopes
+                let mut outer_test_cont: i32;
+                // Mutable external modification (struct-auto; deref early)
+                c_scp! {
+                    use [self] => (
+                        self.test_cell => *out mut outer_test_cont
+                    )
+                }
+                // Modifying in the variable's scope
+                outer_test_cont += 1;
+                assert_eq!(outer_test_cont, 7);
+                // External immutable (struct-auto; deref early)
+                c_scp! {
+                    use [self] => (
+                        self.test_cell => *out outer_test_cont
+                    ) {
+                        // self.test_cell overwrites the variable
+                        // when this c_scp beings.
+                        assert_eq!(outer_test_cont, 6);
+                    }
+                }
+
+                // No auto-store
+                c_scp! {
+                    let my_owner = _ => (
+                        mut self.test_cell
+                    ) {
+                        let careful = self.test_cell.rw(my_owner);
+                        *careful += 1;
+                        assert_eq!(*careful, 7);
+                    }
+                }
+                c_scp! {
+                    let my_owner = [self] => (
+                        self.test_cell
+                    ) {
+                        let careful = self.test_cell.ro(my_owner);
+                        assert_eq!(*careful, 7);
+                    }
+                }
+                c_scp! {
+                    let my_owner = [self] => (
+                        mut self.test_cell
+                    ) {
+                        let careful = self.test_cell.rw(my_owner);
+                        *careful += 1;
+                        assert_eq!(*careful, 8);
+                    }
+                }
+            }
+
+            fn do_test2(&self, mut borrowed_owner: &mut test_uni_grp2::UniOwner) {
+                // Directly borrow pre-built owner
+                c_scp! {
+                    let mutable_owner = &mut borrowed_owner => (
+                        self.test_cell2 => mut careful
+                    ) {
+                        *careful += 1;
+                        assert_eq!(*careful, 3);
+                    }
+                }
+            }
+
+            fn do_test3(&self, borrowed_owner: &test_uni_grp2::UniOwner) {
+                // Directly borrow pre-built owner
+                c_scp! {
+                    use &borrowed_owner => (
+                        self.test_cell2 => careful
+                    ) {
+                        assert_eq!(*careful, 3);
+                    }
+                }
+            }
+
+            fn do_test4(&self, mut borrowed_owner: test_uni_grp2::UniOwner) {
+                // Directly borrow pre-built owner
+                c_scp! {
+                    use &borrowed_owner => (
+                        self.test_cell2 => careful
+                    ) {
+                        assert_eq!(*careful, 3);
+                    }
+                }
+                c_scp! {
+                    use &mut borrowed_owner => (
+                        self.test_cell2 => mut careful
+                    ) {
+                        *careful += 1;
+                        assert_eq!(*careful, 4);
+                    }
+                }
+            }
+        }
+
+        impl_get_uni!(MyStruct => test_uni_grp::UniOwner);
+        impl_get_uni!(MyStruct => test_uni_grp2::UniOwner);
+
+        let test_struct = MyStruct {
+            test_cell: test_uni_grp::UniCell::new(5),
+            test_cell2: test_uni_grp2::UniCell::new(2)
+        };
+
+        test_struct.do_test();
+
+        {
+            let mut borrowable_owner
+                = test_uni_grp2::UniOwner::new();
+            test_struct.do_test2(&mut borrowable_owner);
+            test_struct.do_test3(&borrowable_owner);
+        }
+        
+        {
+            test_struct.do_test4(test_uni_grp2::UniOwner::new());
+        }
     }
 }
