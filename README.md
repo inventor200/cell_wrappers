@@ -1,13 +1,14 @@
 This is a set of macros for ergonomically working with
 [`TCell`]s and [`TLCell`]s from the [`qcell`] crate.
-This was particularly inspired by the [`cell_family`]
-crate, and one additional goal for the `cell_wrapper`
-crate was to be compatible with the [`qcell`] codebase
+This is particularly inspired by the [`cell_family`]
+crate, and one additional goal for the [`cell_wrapper`]
+crate is to be compatible with the [`qcell`] codebase
 as a dependency; no forking necessary.
 
 # Simple declaration
 
-Creating a marker-owner-cell system is now as easy as:
+Creating a marker-owner-cell system is easy with [`def_cells`],
+as we can see here:
 
 ```rust
 def_cells! {
@@ -16,7 +17,7 @@ def_cells! {
 ```
 
 This creates a new inline module (named `foo_grp`, in this example),
-and populates it with a new `TCell` system, along with some
+and populates it with a new [`TCell`] system, along with some
 automatically-implemented `trait`s that will help other parts
 of this crate provide you with even *more* leverage.
 
@@ -92,22 +93,22 @@ project organization purposes.
 And these get appended to the cell types to form declaration
 identifiers, like so:
 
-> `TLCell` + `UniGrp` = `TLCellUniGrp`
+> `TLCell + UniGrp -> TLCellUniGrp`
 
 # Families-style declaration:
 
 Before explaining the benefits of these subcategories, this crate
 does also provide even *simpler* declarations for anyone who prefers
-the simplicity of `cell_family`. The `cell_wrapper` crate only depends
+the simplicity of [`cell_family`]. The [`cell_wrapper`] crate only depends
 on the `qcell` implementation, however, and does not reimplement the
-same logic adjustments found in the `cell_family` implementation.
+same logic adjustments found in the [`cell_family`] implementation.
 
 ```rust
 // For creating a TCell system:
-create_t_group!(FooOwner[FooMarker] => FooCell<T>);
+new_t_group!(FooOwner[FooMarker] => FooCell<T>);
 
 // An alternative syntax, and creating a TLCell system this time:
-create_tl_group! {
+new_tl_group! {
     marker: BarMarker,
     owner: BarOwner,
     cell: BarCell<T>
@@ -119,9 +120,9 @@ new_t_cell_type!(BazCell[BazMarker]<T>);
 new_t_owner_type!(BazOwner[TestTMarker]);
 
 // These allows for visibility specs and attributes:
-create_t_group!(#[allow(dead_code)] pub FooOwner[FooMarker] => FooCell<T>);
+new_t_group!(#[allow(dead_code)] pub FooOwner[FooMarker] => FooCell<T>);
 
-create_tl_group! {
+new_tl_group! {
     pub marker: BarMarker,
     #[allow(dead_code)]
     pub owner: BarOwner,
@@ -129,13 +130,19 @@ create_tl_group! {
 }
 ```
 
+Read more at:
+* [`new_t_group`] / [`new_tl_group`]
+* [`new_t_marker`] / [`new_tl_marker`]
+* [`new_t_owner`] / [`new_tl_owner`]
+* [`new_t_cell`] / [`new_tl_cell`]
+
 # Quick owner scopes
 
 This crate provides a flexible macro-based syntax for quickly
 and easily setting up cell owner scopes for a wide variety of
 use cases.
 
-This macro is called "`c_scp`", which is short for "cell scope".
+This macro is called "[`c_scp`]", which is short for "cell scope".
 
 The following is an example, which will be investigated shortly:
 
@@ -254,14 +261,14 @@ pub trait GetUniOwner<T> {
 }
 ```
 
-For `c_scp` syntaxes which use the `[self]` owner source, these traits
+For [`c_scp`] syntaxes which use the `[self]` owner source, these traits
 are called for `self`. A `struct` can implement these for any number
 of relevant owners, and three macros are provided for automatic
 implementation of these `trait`s:
 
 1. `impl_get_pvt!(struct_name, owner::Path);`
-1. `impl_get_pub!(struct_name, owner::Path);`
-1. `impl_get_uni!(struct_name, owner::Path);`
+2. `impl_get_pub!(struct_name, owner::Path);`
+3. `impl_get_uni!(struct_name, owner::Path);`
 
 You may also want to create custom implementations for these,
 as well, in case you want these methods to do any extra tasks
@@ -272,7 +279,29 @@ the `c_scp` syntax, so it will choose a **uniform**, **public**,
 or **private** implementation based on its own declared
 subcategory type.
 
+Read more at:
+* [`GetPvtOwner`] / [`impl_get_pvt`]
+* [`GetPubOwner`] / [`impl_get_pub`]
+* [`GetUniOwner`] / [`impl_get_uni`]
+
+[`cell_wrapper`]: ./index.html
 [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
 [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 [`qcell`]: https://docs.rs/qcell/latest/qcell/index.html
-[`cell_family`]: https://lib.rs/crates/cell-family
+[`cell_family`]: https://docs.rs/cell-family/0.1.0/cell_family/index.html
+[`def_cells`]: ./macro.def_cells.html
+[`new_t_group`]: ./macro.new_t_group.html
+[`new_tl_group`]: ./macro.new_tl_group.html
+[`new_t_marker`]: ./macro.new_t_marker.html
+[`new_tl_marker`]: ./macro.new_tl_marker.html
+[`new_t_owner`]: ./macro.new_t_owner.html
+[`new_tl_owner`]: ./macro.new_tl_owner.html
+[`new_t_cell`]: ./macro.new_t_cell.html
+[`new_tl_cell`]: ./macro.new_tl_cell.html
+[`c_scp`]: ./macro.c_scp.html
+[`GetPvtOwner`]: ./trait.GetPvtOwner.html
+[`GetPubOwner`]: ./trait.GetPubOwner.html
+[`GetUniOwner`]: ./trait.GetUniOwner.html
+[`impl_get_pvt`]: ./macro.impl_get_pvt.html
+[`impl_get_pub`]: ./macro.impl_get_pub.html
+[`impl_get_uni`]: ./macro.impl_get_uni.html
