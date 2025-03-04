@@ -1,7 +1,7 @@
 //! This is a set of macros for ergonomically working with
 //! [`TCell`]s and [`TLCell`]s from the [`qcell`] crate.
 //! This is particularly inspired by the [`cell_family`]
-//! crate, and one additional goal for the [`cell_wrapper`]
+//! crate, and one additional goal for the [`cell_wrappers`]
 //! crate is to be compatible with the [`qcell`] codebase
 //! as a dependency; no forking necessary.
 //! 
@@ -99,7 +99,7 @@
 //! 
 //! Before explaining the benefits of these subcategories, this crate
 //! does also provide even *simpler* declarations for anyone who prefers
-//! the simplicity of [`cell_family`]. The [`cell_wrapper`] crate only depends
+//! the simplicity of [`cell_family`]. The [`cell_wrappers`] crate only depends
 //! on the `qcell` implementation, however, and does not reimplement the
 //! same logic adjustments found in the [`cell_family`] implementation.
 //! 
@@ -284,7 +284,7 @@
 //! * [`GetPubOwner`] / [`impl_get_pub`]
 //! * [`GetUniOwner`] / [`impl_get_uni`]
 //! 
-//! [`cell_wrapper`]: ./index.html
+//! [`cell_wrappers`]: ./index.html
 //! [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
 //! [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 //! [`qcell`]: https://docs.rs/qcell/latest/qcell/index.html
