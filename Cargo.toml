@@ -2,7 +2,7 @@
 name = "cell_wrappers"
 version = "0.1.1"
 authors = ["Joseph Cramsey"]
-description = "This is a set of macros for ergonomically working with `TCell`s and `TLCell`s from the `qcell` crate."
+description = "This is a set of macros for ergonomically working with TCells and TLCells from the qcell crate."
 license = "MIT"
 homepage = "https://github.com/inventor200/cell_wrappers"
 repository = "https://github.com/inventor200/cell_wrappers"
