@@ -1,6 +1,6 @@
 [package]
 name = "cell_wrappers"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Joseph Cramsey"]
 description = "This is a set of macros for ergonomically working with TCells and TLCells from the qcell crate."
 license = "MIT"

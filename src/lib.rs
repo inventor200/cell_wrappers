@@ -881,54 +881,104 @@ macro_rules! c_scp {
     }
 }
 
-// These structs are just here to give the linter
-// something to match to, if desired.
+/// This module contains empty structs which match the types of cell groups
+/// accepted by [`def_cells`], for those who need something for their linters to
+/// validate against.
+/// 
+/// [`def_cells`]: ./macro.def_cells.html
 mod cell_grp_types {
+    /// Represents a uniform group of [`TCell`]s for linters.
+    /// 
+    /// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
     #[allow(dead_code)]
     pub struct TCellUniGrp;
-    #[allow(dead_code)]
-    pub struct TCellAccGrp;
+    /// Represents a uniform group of [`TLCell`]s for linters.
+    /// 
+    /// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
     #[allow(dead_code)]
     pub struct TLCellUniGrp;
+    /// Represents an access group of [`TCell`]s for linters.
+    /// 
+    /// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
+    #[allow(dead_code)]
+    pub struct TCellAccGrp;
+    /// Represents an access group of [`TLCell`]s for linters.
+    /// 
+    /// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
     #[allow(dead_code)]
     pub struct TLCellAccGrp;
+    /// Represents a public group of [`TCell`]s for linters.
+    /// 
+    /// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
     #[allow(dead_code)]
     pub struct TCellPubGrp;
-    #[allow(dead_code)]
-    pub struct TCellPvtGrp;
+    /// Represents a public group of [`TLCell`]s for linters.
+    /// 
+    /// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
     #[allow(dead_code)]
     pub struct TLCellPubGrp;
+    /// Represents a private group of [`TCell`]s for linters.
+    /// 
+    /// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
+    #[allow(dead_code)]
+    pub struct TCellPvtGrp;
+    /// Represents a private group of [`TLCell`]s for linters.
+    /// 
+    /// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
     #[allow(dead_code)]
     pub struct TLCellPvtGrp;
 }
 
-// Represents the TCell and TLCell implementations.
-// "GT" refers to the possibility of either T or TL.
+/// Represents the [`TCell`] and [`TLCell`] implementations.
+/// "GT" ("General-T") refers to the possibility of either T or TL,
+/// and is not represented here.
+/// 
+/// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
+/// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum CellImpl {
+    /// Indicates the [`TCell`] implementation.
+    /// 
+    /// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
     T,
+    /// Indicates the [`TLCell`] implementation.
+    /// 
+    /// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
     TL
 }
 
-// Represents the default access types.
+/// Represents the default access types for cell groups.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum CellAccessLevels {
+    /// Uniform cell groups are general-purpose, with no implied
+    /// restrictions or organization schemes.
     Uniform,
+    /// Private cell groups are implied to be used by same-`struct` methods.
     Private,
+    /// Public cell groups are intended for program-wide accessibility.
     Public
 }
 
-// Represents the roles in the T/TLCell ecosystem.
+/// Represents the roles in the [`TCell`]/[`TLCell`] ecosystem.
+/// 
+/// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
+/// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum CellRoles {
+    /// Markers restrict owner creation.
     Marker,
+    /// Owners facilitate cell access.
     Owner,
+    // Cells contain data.
     Cell
 }
 
 // These are here for execution management and organization.
-//
-// Implementation type
+
+/// This `trait` allows for standardized polling of implementation type,
+/// and indicates the [`TCell`] implementation.
+/// 
+/// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
 pub trait IsTImpl {
     #[inline]
     fn get_cell_impl() -> CellImpl {
@@ -939,6 +989,11 @@ pub trait IsTImpl {
         CellImpl::T
     }
 }
+
+/// This `trait` allows for standardized polling of implementation type,
+/// and indicates the [`TLCell`] implementation.
+/// 
+/// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 pub trait IsTLImpl {
     #[inline]
     fn get_cell_impl() -> CellImpl {
@@ -949,7 +1004,9 @@ pub trait IsTLImpl {
         CellImpl::TL
     }
 }
-// Access levels
+
+/// This `trait` allows for standardized polling of access type,
+/// and indicates the private access type.
 pub trait IsGTPvtAccess {
     #[inline]
     fn is_private_access() -> bool {
@@ -986,6 +1043,9 @@ pub trait IsGTPvtAccess {
 }
 pub trait IsTPvtAccess : IsGTPvtAccess + IsTImpl {}
 pub trait IsTLPvtAccess : IsGTPvtAccess + IsTLImpl {}
+
+/// This `trait` allows for standardized polling of access type,
+/// and indicates the uniform access type.
 pub trait IsGTUniAccess {
     #[inline]
     fn is_private_access() -> bool {
@@ -1022,6 +1082,9 @@ pub trait IsGTUniAccess {
 }
 pub trait IsTUniAccess : IsGTUniAccess + IsTImpl {}
 pub trait IsTLUniAccess : IsGTUniAccess + IsTLImpl {}
+
+/// This `trait` allows for standardized polling of access type,
+/// and indicates the public access type.
 pub trait IsGTPubAccess {
     #[inline]
     fn is_private_access() -> bool {
@@ -1058,7 +1121,9 @@ pub trait IsGTPubAccess {
 }
 pub trait IsTPubAccess : IsGTPubAccess + IsTImpl {}
 pub trait IsTLPubAccess : IsGTPubAccess + IsTLImpl {}
-// Markers
+
+/// This `trait` allows for standardized polling for cell
+/// ecosystem role, and indicates a marker.
 pub trait IsGTMarker {
     #[inline]
     fn get_cell_role() -> CellRoles {
@@ -1080,7 +1145,9 @@ pub trait IsTLMarker : IsGTMarker + IsTLImpl {}
 pub trait IsTLUniMarker : IsTLMarker + IsTLUniAccess {}
 pub trait IsTLPubMarker : IsTLMarker + IsTLPubAccess {}
 pub trait IsTLPvtMarker : IsTLMarker + IsTLPvtAccess {}
-// Owners
+
+/// This `trait` allows for standardized polling for cell
+/// ecosystem role, and indicates an owner.
 pub trait IsGTOwner {
     #[inline]
     fn get_cell_role() -> CellRoles {
@@ -1102,7 +1169,9 @@ pub trait IsTLOwner : IsGTOwner + IsTLImpl {}
 pub trait IsTLUniOwner : IsTLOwner + IsTLUniAccess {}
 pub trait IsTLPubOwner : IsTLOwner + IsTLPubAccess {}
 pub trait IsTLPvtOwner : IsTLOwner + IsTLPvtAccess {}
-// Cells
+
+/// This `trait` allows for standardized polling for cell
+/// ecosystem role, and indicates a cell.
 pub trait IsGTCell {
     #[inline]
     fn get_cell_role() -> CellRoles {
@@ -1125,18 +1194,24 @@ pub trait IsTLUniCell : IsTLCell + IsTLUniAccess {}
 pub trait IsTLPubCell : IsTLCell + IsTLPubAccess {}
 pub trait IsTLPvtCell : IsTLCell + IsTLPvtAccess {}
 
+/// This `trait` allows an implementor to contextually request a private
+/// owner from a provider.
 pub trait GetEasyPvtOwner {
     type OwnerType;
     fn get_new_matching_owner(&self) -> Self::OwnerType;
     fn get_matching_owner_from(&self, src : & impl GetPvtOwner<Self::OwnerType>) -> Self::OwnerType;
 }
 
+/// This `trait` allows an implementor to contextually request a public
+/// owner from a provider.
 pub trait GetEasyPubOwner {
     type OwnerType;
     fn get_new_matching_owner(&self) -> Self::OwnerType;
     fn get_matching_owner_from(&self, src : & impl GetPubOwner<Self::OwnerType>) -> Self::OwnerType;
 }
 
+/// This `trait` allows an implementor to contextually request a uniform
+/// owner from a provider.
 pub trait GetEasyUniOwner {
     type OwnerType;
     fn get_new_matching_owner(&self) -> Self::OwnerType;
@@ -1160,17 +1235,38 @@ impl<Q> IsTLImpl for qcell::TLCellOwner<Q> {}
 impl<Q> IsGTOwner for qcell::TLCellOwner<Q> {}
 impl<Q> IsTLOwner for qcell::TLCellOwner<Q> {}
 
-// Some traits for getting the shorthand forms to work.
+/// The trait implemented by [`impl_get_pvt`], turning a `struct`
+/// in a private owner provider.
+/// 
+/// [`impl_get_pvt`]: ./macro.impl_get_pvt.html
 pub trait GetPvtOwner<T> {
     fn get_private_owner(&self) -> T;
 }
+
+/// The trait implemented by [`impl_get_pub`], turning a `struct`
+/// in a public owner provider.
+/// 
+/// [`impl_get_pub`]: ./macro.impl_get_pub.html
 pub trait GetPubOwner<T> {
     fn get_public_owner(&self) -> T;
 }
+
+/// The trait implemented by [`impl_get_uni`], turning a `struct`
+/// in a uniform owner provider.
+/// 
+/// [`impl_get_uni`]: ./macro.impl_get_uni.html
 pub trait GetUniOwner<T> {
     fn get_uniform_owner(&self) -> T;
 }
 
+/// This macro generates a default implementation of [`GetPvtOwner`]
+/// for the given `struct`, allowing it to be a provider for private owners.
+/// 
+/// ```rust
+/// impl_get_pvt!(FooStruct => path:to:OwnerType);
+/// ```
+/// 
+/// [`GetPvtOwner`]: ./trait.GetPvtOwner.html
 #[macro_export]
 macro_rules! impl_get_pvt {
     {
@@ -1185,6 +1281,14 @@ macro_rules! impl_get_pvt {
     };
 }
 
+/// This macro generates a default implementation of [`GetPubOwner`]
+/// for the given `struct`, allowing it to be a provider for public owners.
+/// 
+/// ```rust
+/// impl_get_pub!(FooStruct => path:to:OwnerType);
+/// ```
+/// 
+/// [`GetPubOwner`]: ./trait.GetPubOwner.html
 #[macro_export]
 macro_rules! impl_get_pub {
     {
@@ -1199,6 +1303,14 @@ macro_rules! impl_get_pub {
     };
 }
 
+/// This macro generates a default implementation of [`GetUniOwner`]
+/// for the given `struct`, allowing it to be a provider for uniform owners.
+/// 
+/// ```rust
+/// impl_get_uni!(FooStruct => path:to:OwnerType);
+/// ```
+/// 
+/// [`GetUniOwner`]: ./trait.GetUniOwner.html
 #[macro_export]
 macro_rules! impl_get_uni {
     {
@@ -1213,6 +1325,20 @@ macro_rules! impl_get_uni {
     };
 }
 
+/// This macro creates a new [`qcell`] marker, with all the
+/// convenience `trait`s for compatibility with this crate.
+/// 
+/// This marker type is for use with [`TCell`]s.
+/// 
+/// ```rust
+/// new_t_marker_type!(MarkerTypeName);
+/// 
+/// // Also allows for attributes
+/// pub new_t_marker_type!(#[allow(dead_code)] MarkerTypeName);
+/// ```
+/// 
+/// [`qcell`]: https://docs.rs/qcell/latest/qcell/index.html
+/// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
 #[macro_export]
 macro_rules! new_t_marker_type {
     {
@@ -1263,6 +1389,20 @@ macro_rules! new_t_marker_type {
     }
 }
 
+/// This macro creates a new [`qcell`] marker, with all the
+/// convenience `trait`s for compatibility with this crate.
+/// 
+/// This marker type is for use with [`TLCell`]s.
+/// 
+/// ```rust
+/// new_tl_marker_type!(MarkerTypeName);
+/// 
+/// // Also allows for attributes
+/// pub new_tl_marker_type!(#[allow(dead_code)] MarkerTypeName);
+/// ```
+/// 
+/// [`qcell`]: https://docs.rs/qcell/latest/qcell/index.html
+/// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 #[macro_export]
 macro_rules! new_tl_marker_type {
     {
@@ -1313,6 +1453,20 @@ macro_rules! new_tl_marker_type {
     }
 }
 
+/// This macro creates a new [`qcell`] owner, with all the
+/// convenience `trait`s for compatibility with this crate.
+/// 
+/// This marker type is for use with [`TCell`]s.
+/// 
+/// ```rust
+/// new_t_owner_type!(OwnerTypeName[MarkerTypeName]);
+/// 
+/// // Also allows for attributes
+/// pub new_t_owner_type!(#[allow(dead_code)] OwnerTypeName[MarkerTypeName]);
+/// ```
+/// 
+/// [`qcell`]: https://docs.rs/qcell/latest/qcell/index.html
+/// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
 #[macro_export]
 macro_rules! new_t_owner_type {
     {
@@ -1351,6 +1505,20 @@ macro_rules! new_t_owner_type {
     };
 }
 
+/// This macro creates a new [`qcell`] owner, with all the
+/// convenience `trait`s for compatibility with this crate.
+/// 
+/// This marker type is for use with [`TLCell`]s.
+/// 
+/// ```rust
+/// new_tl_owner_type!(OwnerTypeName[MarkerTypeName]);
+/// 
+/// // Also allows for attributes
+/// pub new_tl_owner_type!(#[allow(dead_code)] OwnerTypeName[MarkerTypeName]);
+/// ```
+/// 
+/// [`qcell`]: https://docs.rs/qcell/latest/qcell/index.html
+/// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 #[macro_export]
 macro_rules! new_tl_owner_type {
     {
@@ -1389,6 +1557,18 @@ macro_rules! new_tl_owner_type {
     };
 }
 
+/// This macro creates a new [`qcell`] [`TCell`], with all the
+/// convenience `trait`s for compatibility with this crate.
+/// 
+/// ```rust
+/// new_t_cell_type!(CellTypeName<T>[MarkerTypeName]);
+/// 
+/// // Also allows for attributes
+/// pub new_t_cell_type!(#[allow(dead_code)] CellTypeName<T>[MarkerTypeName]);
+/// ```
+/// 
+/// [`qcell`]: https://docs.rs/qcell/latest/qcell/index.html
+/// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
 #[macro_export]
 macro_rules! new_t_cell_type {
     {
@@ -1454,6 +1634,18 @@ macro_rules! new_t_cell_type {
     };
 }
 
+/// This macro creates a new [`qcell`] [`TLCell`], with all the
+/// convenience `trait`s for compatibility with this crate.
+/// 
+/// ```rust
+/// new_tl_cell_type!(CellTypeName<T>[MarkerTypeName]);
+/// 
+/// // Also allows for attributes
+/// pub new_tl_cell_type!(#[allow(dead_code)] CellTypeName<T>[MarkerTypeName]);
+/// ```
+/// 
+/// [`qcell`]: https://docs.rs/qcell/latest/qcell/index.html
+/// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 #[macro_export]
 macro_rules! new_tl_cell_type {
     {
@@ -1519,6 +1711,25 @@ macro_rules! new_tl_cell_type {
     };
 }
 
+/// This macro creates a new uniform [`TCell`] cell group,
+/// without the creation of an inline module.
+/// 
+/// ```rust
+/// new_t_group!(OwnerTypeName[MarkerTypeName] => CellTypeName<T>);
+/// 
+/// // Also allows for attributes
+/// new_t_group!(#[allow(dead_code)] pub OwnerTypeName[MarkerTypeName] => CellTypeName<T>);
+/// 
+/// // Also allows for `struct`-like syntax, where individual components can
+/// // have different attributes
+/// new_t_group! {
+///     marker: MarkerTypeName,
+///     pub owner: OwnerTypeName,
+///     #[allow(dead_code)] pub cell: CellTypeName<T>
+/// }
+/// ```
+/// 
+/// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
 #[macro_export]
 macro_rules! new_t_group {
     {
@@ -1607,6 +1818,25 @@ macro_rules! new_t_group {
     };
 }
 
+/// This macro creates a new uniform [`TLCell`] cell group,
+/// without the creation of an inline module.
+/// 
+/// ```rust
+/// new_tl_group!(OwnerTypeName[MarkerTypeName] => CellTypeName<T>);
+/// 
+/// // Also allows for attributes
+/// new_tl_group!(#[allow(dead_code)] pub OwnerTypeName[MarkerTypeName] => CellTypeName<T>);
+/// 
+/// // Also allows for `struct`-like syntax, where individual components can
+/// // have different attributes
+/// new_tl_group! {
+///     marker: MarkerTypeName,
+///     pub owner: OwnerTypeName,
+///     #[allow(dead_code)] pub cell: CellTypeName<T>
+/// }
+/// ```
+/// 
+/// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 #[macro_export]
 macro_rules! new_tl_group {
     {
@@ -1732,6 +1962,57 @@ fn pub_cell_unavailable_msg() -> String {
     )
 }
 
+/// This macro can declare entire trees of cell groups at a time.
+/// 
+/// Each line must begin with `[mod]` or `[pub mod]`, and each
+/// level of the tree must be encapsulated in `{`curly braces`}`.
+/// Each line must finally end with a semicolon.
+/// 
+/// ```rust
+/// def_cells! {
+///     [pub mod] put_some_here::{a_bit_further: TLCellUniGrp};
+///     [pub mod] two_go_here::{
+///         this_longer_way::{now_arrived: TLCellPvtGrp},
+///         and_also_this_way: TLCellPubGrp
+///     };
+///     [mod] oh_and_here_too::{no_here::{okay_yes_here: TLCellAccGrp}};
+/// }
+/// ```
+/// 
+/// The simplest case is just the group name and type:
+/// ```rust
+/// // Creates:
+/// //     self::group_name::UniMarker
+/// //     self::group_name::UniOwner
+/// //     self::group_name::UniCell<T>
+/// def_cells! {
+///     [pub mod] group_name: TCellUniGrp;
+/// }
+/// ```
+/// 
+/// The valid [`TCell`] group types are:
+/// 1. `TCellUniGrp`
+/// 2. `TCellAccGrp`
+/// 3. `TCellPubGrp`
+/// 4. `TCellPvtGrp`
+/// 
+/// The valid [`TLCell`] group types are:
+/// 1. `TLCellUniGrp`
+/// 2. `TLCellAccGrp`
+/// 3. `TLCellPubGrp`
+/// 4. `TLCellPvtGrp`
+/// 
+/// * `...UniGrp` types are general-purpose, and not intended for any
+/// specific role.
+/// * `...AccGrp` types create a public and private group in one inline module.
+/// * `...PubGrp` types are intended for program-wide access.
+/// * `...PvtGrp` types are intended for internal `struct` method use only.
+/// 
+/// If you need dummy `structs` for your linter to detect and validate
+/// group types, you might want to `use` the `cell_grp_types` module.
+/// 
+/// [`TCell`]: https://docs.rs/qcell/latest/qcell/struct.TCell.html
+/// [`TLCell`]: https://docs.rs/qcell/latest/qcell/struct.TLCell.html
 #[macro_export]
 macro_rules! def_cells {
     // Uniform group
